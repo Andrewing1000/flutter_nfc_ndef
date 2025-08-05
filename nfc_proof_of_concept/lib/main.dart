@@ -27,7 +27,6 @@ class CoDiScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Define brand colors from the screenshot
     const Color santanderRed = Color(0xFFEC0000);
     const Color successGreenBg = Color(0xFFE8F5E9);
     const Color successGreenText = Color(0xFF2E7D32);
@@ -35,12 +34,11 @@ class CoDiScreen extends StatelessWidget {
     const Color inactiveGreyText = Color(0xFF757575);
 
     return Scaffold(
-      // === APP BAR ===
       appBar: AppBar(
         backgroundColor: santanderRed,
-        foregroundColor: Colors.white, // Sets icon and text color to white
+        foregroundColor: Colors.white, 
         elevation: 2,
-        leading: const Icon(Icons.qr_code), // Santander-like icon
+        leading: const Icon(Icons.qr_code), 
         titleSpacing: 0,
         title: const Text("Za\$ Pago QR"),
         actions: [
@@ -49,7 +47,6 @@ class CoDiScreen extends StatelessWidget {
             child: IconButton(
               icon: const Icon(Icons.menu),
               onPressed: () {
-                // Action for hamburger menu
               },
             ),
           ),
@@ -57,7 +54,6 @@ class CoDiScreen extends StatelessWidget {
 
       ),
 
-      // === BODY ===
       body: Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24.0),
@@ -67,9 +63,8 @@ class CoDiScreen extends StatelessWidget {
             children: [
               const Spacer(flex: 2),
 
-              // === QR CODE ===
               Container(
-                padding: const EdgeInsets.all(8.0), // White border around QR
+                padding: const EdgeInsets.all(8.0), 
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(12),
@@ -84,13 +79,12 @@ class CoDiScreen extends StatelessWidget {
                 child: QrImageView(
                   data: 'https://codi.org.mx/charge/123456789',
                   version: QrVersions.auto,
-                  size: MediaQuery.of(context).size.width * 0.6, // Responsive size
+                  size: MediaQuery.of(context).size.width * 0.6, 
                 ),
               ),
 
               const Spacer(flex: 1),
 
-              // === SUCCESS MESSAGE ===
               Container(
                 padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
                 decoration: BoxDecoration(
@@ -109,7 +103,6 @@ class CoDiScreen extends StatelessWidget {
 
               const SizedBox(height: 20),
 
-              // === NFC STATUS (Secondary Font) ===
               Container(
                 padding: const EdgeInsets.symmetric(vertical: 10.0, horizontal: 20.0),
                 decoration: BoxDecoration(
@@ -121,11 +114,10 @@ class CoDiScreen extends StatelessWidget {
                   children: [
                     Icon(Icons.nfc, color: Color.fromARGB(255, 255, 255, 255)),
                     const SizedBox(width: 12),
-                    // Here we explicitly apply the secondary font "SpaceMono"
                     Text(
                       'NFC inactivo',
                       style: TextStyle(
-                        fontFamily: 'SpaceMono', // Override the default font
+                        fontFamily: 'SpaceMono', 
                         color: Color.fromARGB(255, 255, 255, 255),
                         fontSize: 16,
                       ),
@@ -144,7 +136,7 @@ class CoDiScreen extends StatelessWidget {
                     '100.00',
                     style: TextStyle(
                       fontFamily: 'IBMPlexSans',
-                      fontWeight: FontWeight.w500, // Selects SpaceMono-Bold.ttf
+                      fontWeight: FontWeight.w500,
                       fontSize: 52,
                       color: Colors.black87,
                     ),
@@ -153,7 +145,6 @@ class CoDiScreen extends StatelessWidget {
                     padding: const EdgeInsets.only(left: 8.0, bottom: 8.0),
                     child: Text(
                       'MXN',
-                      // Using SpaceMono Regular for the currency
                       style: TextStyle(
                         fontFamily: 'SpaceMono',
                         fontSize: 20,
