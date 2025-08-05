@@ -53,7 +53,7 @@ class HceStateMachine {
   final _NdefFile ndefFile;
 
   // El AID estándar para la aplicación NDEF.
-  static final ndefAid = Uint8List.fromList([0xD2, 0x76, 0x00, 0x00, 0x85, 0x01, 0x01]);
+  static final ndefAid = Uint8List.fromList([0xA0, 0x00, 0xDA, 0xDA, 0xDA, 0xDA, 0xDA]);
 
   HceStateMachine({
     required NdefMessageSerializer initialMessage,

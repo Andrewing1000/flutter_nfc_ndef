@@ -1,10 +1,6 @@
 group 'io.flutter.plugins.nfc_host_card_emulation'
 version '1.0-SNAPSHOT'
 
-android {
-    namespace 'io.flutter.plugins.nfc_host_card_emulation'
-}
-
 buildscript {
     ext.kotlin_version = '1.7.10'
     repositories {

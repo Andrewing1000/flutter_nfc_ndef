@@ -39,41 +39,29 @@ class NfcHce {
     );
   }
 
-  /// Adds an APDU response to the specified port (P2 byte in APDU command).
-  ///
-  /// Parameter 'data' mast be byte array.
   static Future<void> addApduResponse(int port, List<int> data) async {
     await _platform.addApduResponse(port, Uint8List.fromList(data));
   }
 
-  /// Removes an APDU response from the specified port (P2 byte in APDU command)
   static Future<void> removeApduResponse(int port) async {
     await _platform.removeApduResponse(port);
   }
 
-  /// Checks device's NFC state
   static Future<NfcState> checkDeviceNfcState() async {
     return await _platform.checkDeviceNfcState();
   }
 }
 
-/// A class that contains data about accepted APDU commands.
 class NfcApduCommand {
-  /// The port that the APDU command came to.
   final int port;
 
-  /// A list containing the following APDU command's fields:
-  /// CLA, INS, P1, P2, AID_Length, AID
   final Uint8List command;
 
-  /// A list containing additional data that comes after AID.
-  /// If null, no additional data has been added.
   final Uint8List? data;
 
   const NfcApduCommand(this.port, this.command, this.data);
 }
 
-/// Enum for representing different states of an NFC device.
 enum NfcState {
   enabled,
   disabled,
