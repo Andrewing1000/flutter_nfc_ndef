@@ -227,7 +227,7 @@ class _QRState extends State<CoDiScreen> {
                     const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
                 decoration: BoxDecoration(
                   color: successGreenBg,
-                  borderRadius: BorderRadius.circular(8.0),
+                  borderRadius: BorderRadius.circular(3.0),
                   border: Border.all(color: successGreenText),
                 ),
                 child: const Text(
@@ -241,11 +241,29 @@ class _QRState extends State<CoDiScreen> {
                 ),
               ),
 
+              // const Spacer(flex: 3),
+
+              // const Padding(
+              //   padding: EdgeInsets.only(bottom: 20.0),
+              //   child: Icon(Icons.more_horiz, color: Colors.grey, size: 40),
+              // ),
+
               const Spacer(flex: 3),
 
-              const Padding(
-                padding: EdgeInsets.only(bottom: 20.0),
-                child: Icon(Icons.more_horiz, color: Colors.grey, size: 40),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(
+                    height: 80,
+                  decoration: BoxDecoration(color: santanderRed),
+                  child: Image.asset(
+                      'assets/icons/sazLogo.png',
+                      height: 100,
+                      fit: BoxFit.cover,
+                      
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
