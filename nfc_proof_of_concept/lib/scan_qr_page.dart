@@ -195,8 +195,8 @@ class _UiHintsBelowCutout extends StatelessWidget {
           child: Padding(
             padding: EdgeInsets.only(bottom: padding.bottom + 24),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 320), // pick your cap
-              child: const NfcActiveBar(toggle: true),
+              constraints: const BoxConstraints(maxWidth: 320), 
+              child: const NfcActiveBar(clearText: true),
             ),
           ),
         ),

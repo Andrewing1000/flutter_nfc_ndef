@@ -7,7 +7,8 @@ import 'package:nfc_host_card_emulation/nfc_host_card_emulation.dart';
 
 class NfcActiveBar extends StatefulWidget {
   final bool toggle;
-  const NfcActiveBar({super.key, this.toggle = false});
+  final bool clearText;
+  const NfcActiveBar({super.key, this.toggle = false, this.clearText = false});
   @override
   State<NfcActiveBar> createState() => _NfcActiveBarState();
 }
@@ -23,7 +24,7 @@ class _NfcActiveBarState extends State<NfcActiveBar>
 
   final Duration _pulseDuration = const Duration(milliseconds: 2200);
   final Duration _heartbeatMedian = const Duration(milliseconds: 1500);
-  final double _heartbeatJitter = 0.10;
+  final double _heartbeatJitter = 0.60;
   final double _autoBaseAlpha = 0.30;
   final double _manualBaseAlpha = 0.25;
 
@@ -85,9 +86,8 @@ class _NfcActiveBarState extends State<NfcActiveBar>
   void _scheduleNextHeartbeat() {
     _hbTimer?.cancel();
     final Duration delay = _jitteredDelay(
-      _nfcReady ? _heartbeatMedian : _heartbeatMedian * 2,
-      _heartbeatJitter,
-    );
+      _nfcReady ? _heartbeatMedian : _heartbeatMedian * 3,
+      _nfcReady? _heartbeatJitter: 0.1);
 
     _hbTimer = Timer(delay, () {
       if (!mounted) return;
@@ -193,10 +193,10 @@ class _NfcActiveBarState extends State<NfcActiveBar>
   Widget build(BuildContext context) {
     final bool isActiveUi = _nfcReady;
     final bgColor = isActiveUi ? Colors.black : Colors.transparent;
-    final fgColor = isActiveUi^widget.toggle ? Colors.white : Colors.black;
+    final fgColor = (widget.clearText || isActiveUi)? Colors.white : Colors.black;
 
     final rippleColor =
-        isActiveUi^widget.toggle ? const Color.fromARGB(255, 228, 228, 228) : Colors.white;
+        (widget.clearText || isActiveUi^widget.toggle) ? Colors.white : const Color.fromARGB(255, 146, 146, 146);
 
     final decoration = BoxDecoration(
       color: bgColor,
