@@ -39,6 +39,7 @@ dependencies:
   nfc_host_card_emulation:
     path: packages/nfc_host_card_emulation
   qr_flutter: ^4.1.0
+  camera: 0.10.5+7
 
 dev_dependencies:
   flutter_test:
@@ -64,7 +65,7 @@ flutter:
 
   assets:
     - assets/fonts/
-    - assets/icons/sazLogo.png
+    - assets/icons/
 
   fonts:
     - family: IBMPlexSans
