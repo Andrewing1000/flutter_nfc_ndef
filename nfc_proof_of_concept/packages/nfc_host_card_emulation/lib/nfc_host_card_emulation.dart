@@ -9,7 +9,7 @@ export 'package:nfc_host_card_emulation/app_layer/ndef_format/serializers/ndef_m
     show NdefRecordTuple, NdefMessageSerializer;
 export 'package:nfc_host_card_emulation/app_layer/ndef_format/fields/ndef_record_fields.dart';
 export 'package:nfc_host_card_emulation/nfc_host_card_emulation_platform_interface.dart'
-    show HceTransaction, NfcState;
+    show HceTransaction, NfcState, NdefRecordData;
 
 /// The main class for interacting with the HCE (Host Card Emulation) functionality.
 ///

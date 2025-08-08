@@ -74,8 +74,8 @@ dependencies {
         pluginsFile.withReader('UTF-8') { reader -> plugins.load(reader) }
     }
     
-    // Flutter dependency
-    compileOnly files("${plugins.get('flutter')}android-arm/flutter.jar")
+    // Flutter dependency - temporarily commented out due to path issues
+    // compileOnly files("${plugins.get('flutter')}android-arm/flutter.jar")
     
     // Testing dependencies
     testImplementation 'junit:junit:4.13.2'

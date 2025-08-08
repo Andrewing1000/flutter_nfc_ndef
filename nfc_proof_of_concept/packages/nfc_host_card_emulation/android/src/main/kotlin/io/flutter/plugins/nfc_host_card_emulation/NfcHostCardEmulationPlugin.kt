@@ -68,7 +68,7 @@ class NfcHostCardEmulationPlugin : FlutterPlugin, MethodCallHandler, ActivityAwa
 
     override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) { onAttachedToActivity(binding) }
     override fun onDetachedFromActivityForConfigChanges() { onDetachedFromActivity() }
--
+
     override fun onMethodCall(@NonNull call: MethodCall, @NonNull result: Result) {
         val machine = HceManager.stateMachine
 

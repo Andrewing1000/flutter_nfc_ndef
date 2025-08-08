@@ -1,4 +1,3 @@
-import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:nfc_proof_of_concept/nfc_active_bar.dart';
 import 'package:nfc_proof_of_concept/qr_container.dart';
@@ -45,7 +44,10 @@ class RecievePaymentPageState extends State<RecievePaymentPage> {
             const Spacer(flex: 1),
             const QRContainer(data: 'fadsfsdkanfkjasdnfsdafsdkjfnnasdkjfnasd'),
             const Spacer(flex: 1),
-            NfcActiveBar(),
+            const NfcActiveBar(
+              broadcastData: 'fadsfsdkanfkjasdnfsdafsdkjfnnasdkjfnasd',
+              mode: NfcBarMode.broadcastOnly,
+            ),
             const Spacer(flex: 1),
           ],
         ),

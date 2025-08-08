@@ -2,7 +2,7 @@ name: nfc_proof_of_concept
 description: "A new Flutter project."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
-publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
 # The following defines the version and build number for your application.
 # A version number is three numbers separated by dots, like 1.2.43
@@ -31,13 +31,12 @@ dependencies:
   flutter:
     sdk: flutter
 
-
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   nfc_manager: ^3.5.0
-  nfc_host_card_emulation:
-    path: packages/nfc_host_card_emulation
+  # nfc_host_card_emulation:
+  #   path: packages/nfc_host_card_emulation
   qr_flutter: ^4.1.0
   camera: 0.10.5+7
 
@@ -57,7 +56,6 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
-
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.
@@ -71,7 +69,7 @@ flutter:
     - family: IBMPlexSans
       fonts:
         - asset: assets/fonts/IBMPlexSans-VariableFont_wdth,wght.ttf
-  
+
     - family: SpaceMono
       fonts:
         - asset: assets/fonts/SpaceMono-Regular.ttf
@@ -83,22 +81,20 @@ flutter:
           weight: 700
           style: italic
 
-
-
 fonts:
-    - family: IBMPlexSans
-      fonts:
-        - asset: assets/fonts/IBMPlexSans-Regular.ttf
-        - asset: assets/fonts/IBMPlexSans-Medium.ttf
-          weight: 500
-        - asset: assets/fonts/IBMPlexSans-SemiBold.ttf
-          weight: 600
-          
-    - family: SpaceMono
-      fonts:
-        - asset: assets/fonts/SpaceMono-Regular.ttf
-        - asset: assets/fonts/SpaceMono-Bold.ttf
-          weight: 700
+  - family: IBMPlexSans
+    fonts:
+      - asset: assets/fonts/IBMPlexSans-Regular.ttf
+      - asset: assets/fonts/IBMPlexSans-Medium.ttf
+        weight: 500
+      - asset: assets/fonts/IBMPlexSans-SemiBold.ttf
+        weight: 600
+
+  - family: SpaceMono
+    fonts:
+      - asset: assets/fonts/SpaceMono-Regular.ttf
+      - asset: assets/fonts/SpaceMono-Bold.ttf
+        weight: 700
 
   # To add assets to your application, add an assets section, like this:
   # assets:

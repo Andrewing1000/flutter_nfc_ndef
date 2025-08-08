@@ -2,7 +2,9 @@
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:nfc_manager/nfc_manager.dart';
 import 'package:nfc_proof_of_concept/nfc_active_bar.dart';
+import './main.dart';
 
 class ScanQrPage extends StatefulWidget {
   const ScanQrPage({super.key});
@@ -14,6 +16,8 @@ class ScanQrPage extends StatefulWidget {
 class _ScanQrPageState extends State<ScanQrPage> {
   CameraController? _cameraController;
   bool _isCameraInitialized = false;
+  bool _isNfcAvailable = false;
+  bool _isListeningForNfc = false;
 
   static const double _cornerRadius = 16;
 
@@ -21,6 +25,7 @@ class _ScanQrPageState extends State<ScanQrPage> {
   void initState() {
     super.initState();
     _initializeCamera();
+    _initializeNfc();
   }
 
   Future<void> _initializeCamera() async {
@@ -43,9 +48,107 @@ class _ScanQrPageState extends State<ScanQrPage> {
     }
   }
 
+  Future<void> _initializeNfc() async {
+    try {
+      _isNfcAvailable = await NfcManager.instance.isAvailable();
+      if (_isNfcAvailable) {
+        _startNfcSession();
+      }
+    } catch (e) {
+      debugPrint("NFC initialization error: $e");
+      _isNfcAvailable = false;
+    }
+  }
+
+  void _startNfcSession() {
+    if (_isListeningForNfc) return;
+
+    setState(() => _isListeningForNfc = true);
+
+    NfcManager.instance.startSession(
+      onDiscovered: (NfcTag tag) async {
+        try {
+          // Show notification that NFC device was detected
+          appLayoutKey.currentState?.showNotification(
+            text: "Dispositivo NFC detectado",
+            icon: Icons.nfc,
+          );
+
+          final ndef = Ndef.from(tag);
+          if (ndef != null && ndef.cachedMessage != null) {
+            final message = ndef.cachedMessage!;
+
+            // Look for text/plain records
+            for (final record in message.records) {
+              if (record.type.length >= 1 && record.type[0] == 0x54) {
+                // 'T' for text record
+                final payloadBytes = record.payload;
+                if (payloadBytes.isNotEmpty) {
+                  // Skip the language code byte(s) - simple parsing
+                  final textStart =
+                      payloadBytes[0] + 1; // Language code length + 1
+                  if (textStart < payloadBytes.length) {
+                    final text =
+                        String.fromCharCodes(payloadBytes.sublist(textStart));
+
+                    // Navigate to payment confirmation page
+                    if (mounted) {
+                      _navigateToPaymentConfirmation(text);
+                    }
+                    return;
+                  }
+                }
+              }
+              // Also try text/plain MIME type
+              else if (String.fromCharCodes(record.type) == 'text/plain') {
+                final text = String.fromCharCodes(record.payload);
+                if (mounted) {
+                  _navigateToPaymentConfirmation(text);
+                }
+                return;
+              }
+            }
+          }
+
+          // If no valid text found
+          appLayoutKey.currentState?.showNotification(
+            text: "No se pudo leer los datos NFC",
+            icon: Icons.error,
+          );
+        } catch (e) {
+          debugPrint("Error reading NFC: $e");
+          appLayoutKey.currentState?.showNotification(
+            text: "Error al leer NFC",
+            icon: Icons.error,
+          );
+        }
+      },
+    );
+  }
+
+  void _navigateToPaymentConfirmation(String paymentData) {
+    // Stop NFC session before navigation
+    NfcManager.instance.stopSession();
+    setState(() => _isListeningForNfc = false);
+
+    // Show success notification
+    appLayoutKey.currentState?.showNotification(
+      text: "Datos recibidos: $paymentData",
+      icon: Icons.check,
+    );
+
+    // TODO: Navigate to payment confirmation page
+    // Navigator.push(context, MaterialPageRoute(
+    //   builder: (context) => PaymentConfirmationPage(paymentData: paymentData)
+    // ));
+  }
+
   @override
   void dispose() {
     _cameraController?.dispose();
+    if (_isListeningForNfc) {
+      NfcManager.instance.stopSession();
+    }
     super.dispose();
   }
 
@@ -195,8 +298,11 @@ class _UiHintsBelowCutout extends StatelessWidget {
           child: Padding(
             padding: EdgeInsets.only(bottom: padding.bottom + 24),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 320), 
-              child: const NfcActiveBar(clearText: true),
+              constraints: const BoxConstraints(maxWidth: 320),
+              child: const NfcActiveBar(
+                clearText: true,
+                mode: NfcBarMode.readOnly,
+              ),
             ),
           ),
         ),

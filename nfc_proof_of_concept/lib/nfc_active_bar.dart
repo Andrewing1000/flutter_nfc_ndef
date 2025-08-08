@@ -1,14 +1,27 @@
 import 'dart:async';
 import 'dart:math' as math;
+// import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import 'package:flutter/scheduler.dart';
-import 'package:nfc_host_card_emulation/nfc_host_card_emulation.dart';
+// import 'package:nfc_host_card_emulation/nfc_host_card_emulation.dart';
+// import 'nfc_aid_helper.dart';
+
+enum NfcBarMode { broadcastOnly, readOnly }
 
 class NfcActiveBar extends StatefulWidget {
   final bool toggle;
   final bool clearText;
-  const NfcActiveBar({super.key, this.toggle = false, this.clearText = false});
+  final String broadcastData;
+  final NfcBarMode mode;
+
+  const NfcActiveBar(
+      {super.key,
+      this.toggle = false,
+      this.clearText = false,
+      this.broadcastData = " ",
+      this.mode = NfcBarMode.broadcastOnly});
+
   @override
   State<NfcActiveBar> createState() => _NfcActiveBarState();
 }
@@ -58,10 +71,34 @@ class _NfcActiveBarState extends State<NfcActiveBar>
 
     bool isEnabled = false;
     try {
-      var res = await NfcHce.checkDeviceNfcState();
-      isEnabled = (res == NfcState.enabled);
+      // TODO: Re-enable HCE when package compilation is fixed
+      // var res = await NfcHce.checkDeviceNfcState();
+      // isEnabled = (res == NfcState.enabled);
+
+      // // Only initialize HCE service for broadcastOnly mode
+      // if (isEnabled && widget.mode == NfcBarMode.broadcastOnly) {
+      //   final aid = await NfcAidHelper.getAidFromXml();
+
+      //   await NfcHce.init(aid: aid);
+
+      //   await NfcHce.addOrUpdateNdefFile(
+      //       fileId: 0xE104,
+      //       records: [
+      //         NdefRecordData(
+      //           type: 'text/plain',
+      //           payload: Uint8List.fromList(widget.broadcastData.codeUnits),
+      //         )
+      //       ],
+      //       maxFileSize: 2048,
+      //       isWritable: false);
+      // }
+
+      // For now, just simulate NFC enabled state
+      isEnabled = true;
+
       await Future.delayed(const Duration(milliseconds: 1000));
     } catch (e) {
+      print('NFC initialization error: $e');
       isEnabled = false;
     } finally {
       if (!mounted) return;
@@ -86,8 +123,8 @@ class _NfcActiveBarState extends State<NfcActiveBar>
   void _scheduleNextHeartbeat() {
     _hbTimer?.cancel();
     final Duration delay = _jitteredDelay(
-      _nfcReady ? _heartbeatMedian : _heartbeatMedian * 3,
-      _nfcReady? _heartbeatJitter: 0.1);
+        _nfcReady ? _heartbeatMedian : _heartbeatMedian * 3,
+        _nfcReady ? _heartbeatJitter : 0.1);
 
     _hbTimer = Timer(delay, () {
       if (!mounted) return;
@@ -193,10 +230,12 @@ class _NfcActiveBarState extends State<NfcActiveBar>
   Widget build(BuildContext context) {
     final bool isActiveUi = _nfcReady;
     final bgColor = isActiveUi ? Colors.black : Colors.transparent;
-    final fgColor = (widget.clearText || isActiveUi)? Colors.white : Colors.black;
+    final fgColor =
+        (widget.clearText || isActiveUi) ? Colors.white : Colors.black;
 
-    final rippleColor =
-        (widget.clearText || isActiveUi^widget.toggle) ? Colors.white : const Color.fromARGB(255, 146, 146, 146);
+    final rippleColor = (widget.clearText || isActiveUi ^ widget.toggle)
+        ? Colors.white
+        : const Color.fromARGB(255, 146, 146, 146);
 
     final decoration = BoxDecoration(
       color: bgColor,
@@ -239,7 +278,8 @@ class _NfcActiveBarState extends State<NfcActiveBar>
                             height: 18,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(fgColor),
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(fgColor),
                             ),
                           )
                         : Row(
