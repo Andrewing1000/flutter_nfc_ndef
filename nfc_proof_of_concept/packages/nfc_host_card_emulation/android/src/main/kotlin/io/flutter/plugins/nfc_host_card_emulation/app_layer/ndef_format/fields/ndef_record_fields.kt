@@ -53,12 +53,36 @@ class NdefFlagByte private constructor(flagByte: Int) : ApduField("Flags", 1) {
             if (hasId) value = value or IL_MASK
             return NdefFlagByte(value)
         }
+
+        fun chunk(
+            tnf: Tnf?, isFirstChunk: Boolean = false, isLastChunk: Boolean = false,
+            isFirstMessageRecord: Boolean = false, isLastMessageRecord: Boolean = false,
+            hasId: Boolean = false
+        ): NdefFlagByte {
+            val value = when {
+                isFirstChunk -> {
+                    requireNotNull(tnf) { "TNF must be provided for the first chunk." }
+                    var v = CF_MASK or tnf.value
+                    if (isFirstMessageRecord) v = v or MB_MASK
+                    if (hasId) v = v or IL_MASK
+                    v
+                }
+                isLastChunk -> {
+                    var v = Tnf.UNCHANGED.value
+                    if (isLastMessageRecord) v = v or ME_MASK
+                    v
+                }
+                else -> CF_MASK or Tnf.UNCHANGED.value
+            }
+            return NdefFlagByte(value)
+        }
     }
 }
 
 class NdefTypeLengthField(length: Int) : ApduField("Type Length", 1) {
     companion object {
         val zero = NdefTypeLengthField(0)
+        val forWkt = NdefTypeLengthField(1)
     }
 
     init {
@@ -90,7 +114,7 @@ sealed class NdefPayloadLengthField(size: Int, name: String) : ApduField(name, s
 
     class Short(private val length: Int) : NdefPayloadLengthField(1, "Payload Length (SR)") {
         init {
-            require(length in 0..255)
+            require(length in 0..255) { "Payload Length for short record is invalid." }
             buffer[0] = length.toByte()
         }
         override fun getValue(): Long = length.toLong()
@@ -98,7 +122,7 @@ sealed class NdefPayloadLengthField(size: Int, name: String) : ApduField(name, s
 
     class Long(private val length: Long) : NdefPayloadLengthField(4, "Payload Length") {
         init {
-            require(length in 0..0xFFFFFFFF)
+            require(length in 0..0xFFFFFFFF) { "Payload Length for long record is invalid." }
             buffer[0] = (length shr 24 and 0xFF).toByte()
             buffer[1] = (length shr 16 and 0xFF).toByte()
             buffer[2] = (length shr 8 and 0xFF).toByte()
@@ -117,12 +141,44 @@ class NdefIdLengthField(length: Int) : ApduField("ID Length", 1) {
 
 class NdefTypeField private constructor(typeBytes: Bytes, val tnf: Tnf) : ApduData("Type", typeBytes) {
     companion object {
+        @JvmStatic
+        fun fromBytes(typeBytes: Bytes, tnf: Tnf) = NdefTypeField(typeBytes, tnf)
+
+        @JvmStatic
         fun wellKnown(type: String) = NdefTypeField(type.toByteArray(StandardCharsets.US_ASCII), Tnf.WELL_KNOWN)
+        
+        @JvmStatic
+        fun mediaType(mimeType: String) = NdefTypeField(mimeType.toByteArray(StandardCharsets.US_ASCII), Tnf.MEDIA_TYPE)
+        
+        @JvmStatic
+        fun externalType(externalType: String) = NdefTypeField(externalType.toByteArray(StandardCharsets.US_ASCII), Tnf.EXTERNAL_TYPE)
+
+        @JvmField
+        val text = wellKnown("T")
+        
+        @JvmField
+        val uri = wellKnown("U")
+        
+        @JvmField
+        val smartPoster = wellKnown("Sp")
+        
+        @JvmField
+        val textPlain = mediaType("text/plain")
+        
+        @JvmField
+        val empty = NdefTypeField(Bytes(0), Tnf.EMPTY)
+        
+        @JvmField
+        val unknown = NdefTypeField(Bytes(0), Tnf.UNKNOWN)
+        
+        @JvmField
+        val unchanged = NdefTypeField(Bytes(0), Tnf.UNCHANGED)
     }
 }
 
 class NdefIdField(id: Bytes) : ApduData("ID", id) {
     companion object {
+        @JvmStatic
         fun fromAscii(id: String) = NdefIdField(id.toByteArray(StandardCharsets.US_ASCII))
     }
 }

@@ -3,133 +3,63 @@ package io.flutter.plugins.nfc_host_card_emulation.file_access.serializers
 import io.flutter.plugins.nfc_host_card_emulation.app_layer.ApduData
 import io.flutter.plugins.nfc_host_card_emulation.app_layer.ApduSerializer
 import io.flutter.plugins.nfc_host_card_emulation.app_layer.Bytes
-import io.flutter.plugins.nfc_host_card_emulation.file_access.fields.*
+import io.flutter.plugins.nfc_host_card_emulation.file_access.fields.ApduStatusWord
 
-sealed class ApduCommand(
-    val cla: ApduClass,
-    val ins: ApduInstruction,
+class ApduResponse private constructor(
+    val data: ApduData?,
+    val statusWord: ApduStatusWord,
     name: String
 ) : ApduSerializer(name) {
-    companion object {
-        fun fromBytes(rawCommand: Bytes): ApduCommand {
-            require(rawCommand.size >= 4) { "Invalid APDU command: must be at least 4 bytes long. Got ${rawCommand.size} bytes." }
-
-            val insByte = rawCommand[1].toInt() and 0xFF
-            return when (insByte) {
-                ApduInstruction.SELECT_BYTE -> SelectCommand.fromBytes(rawCommand)
-                ApduInstruction.READ_BINARY_BYTE -> ReadBinaryCommand.fromBytes(rawCommand)
-                ApduInstruction.UPDATE_BINARY_BYTE -> UpdateBinaryCommand.fromBytes(rawCommand)
-                else -> UnknownCommand.fromBytes(rawCommand)
-            }
-        }
-    }
-}
-
-class SelectCommand private constructor(
-    val params: ApduParams,
-    val lc: ApduLc,
-    val data: ApduData
-) : ApduCommand(ApduClass.standard, ApduInstruction.select, "SELECT Command") {
-    companion object {
-        internal fun fromBytes(rawCommand: Bytes): SelectCommand {
-            require(rawCommand.size >= 5) { "Invalid SELECT command frame: expected at least 5 bytes, got ${rawCommand.size}." }
-            val lcValue = rawCommand[4].toInt() and 0xFF
-            require(rawCommand.size == 5 + lcValue) { "Invalid SELECT command frame: Lc value of $lcValue does not match data length of ${rawCommand.size - 5}." }
-
-            val p1 = rawCommand[2].toInt() and 0xFF
-            val p2 = rawCommand[3].toInt() and 0xFF
-            val commandData = rawCommand.sliceArray(5 until 5 + lcValue)
-
-            return SelectCommand(
-                params = ApduParams(p1, p2, "P1-P2 (Parsed)"),
-                lc = ApduLc(lcValue),
-                data = ApduData("Data (Parsed)", commandData)
-            )
-        }
-    }
-
-    override fun setFields() {
-        fields = listOf(cla, ins, params, lc, data)
-    }
-}
-
-class ReadBinaryCommand private constructor(
-    val params: ApduParams,
-    val le: ApduLe
-) : ApduCommand(ApduClass.standard, ApduInstruction.readBinary, "READ BINARY Command") {
-    val offset: Int
-        get() = ((params.buffer[0].toInt() and 0xFF) shl 8) or (params.buffer[1].toInt() and 0xFF)
-    val lengthToRead: Int
-        get() = le.buffer[0].toInt() and 0xFF
 
     companion object {
-        internal fun fromBytes(rawCommand: Bytes): ReadBinaryCommand {
-            require(rawCommand.size == 5) { "Invalid READ BINARY command frame: expected exactly 5 bytes, got ${rawCommand.size}." }
-            val p1 = rawCommand[2].toInt() and 0xFF
-            val p2 = rawCommand[3].toInt() and 0xFF
-            val leValue = rawCommand[4].toInt() and 0xFF
-            return ReadBinaryCommand(
-                params = ApduParams(p1, p2, "P1-P2 (Parsed)"),
-                le = ApduLe(leValue)
-            )
-        }
-    }
+        @JvmStatic
+        fun fromBytes(rawResponse: Bytes): ApduResponse {
+            require(rawResponse.size >= 2) { "Invalid APDU response: must be at least 2 bytes for the status word. Got ${rawResponse.size} bytes." }
 
-    override fun setFields() {
-        fields = listOf(cla, ins, params, le)
-    }
-}
-
-class UpdateBinaryCommand private constructor(
-    val params: ApduParams,
-    val lc: ApduLc,
-    val data: ApduData
-) : ApduCommand(ApduClass.standard, ApduInstruction.updateBinary, "UPDATE BINARY Command") {
-    val offset: Int
-        get() = ((params.buffer[0].toInt() and 0xFF) shl 8) or (params.buffer[1].toInt() and 0xFF)
-    val dataToWrite: Bytes
-        get() = data.buffer
-
-    companion object {
-        internal fun fromBytes(rawCommand: Bytes): UpdateBinaryCommand {
-            require(rawCommand.size >= 5) { "Invalid UPDATE BINARY command frame: expected at least 5 bytes, got ${rawCommand.size}." }
-            val lcValue = rawCommand[4].toInt() and 0xFF
-            require(rawCommand.size == 5 + lcValue) { "Invalid UPDATE BINARY command frame: Lc value of $lcValue does not match data length of ${rawCommand.size - 5}." }
-
-            val p1 = rawCommand[2].toInt() and 0xFF
-            val p2 = rawCommand[3].toInt() and 0xFF
-            val commandData = rawCommand.sliceArray(5 until 5 + lcValue)
-
-            return UpdateBinaryCommand(
-                params = ApduParams(p1, p2, "P1-P2 (Parsed)"),
-                lc = ApduLc(lcValue),
-                data = ApduData("Data (Parsed)", commandData)
-            )
-        }
-    }
-
-    override fun setFields() {
-        fields = listOf(cla, ins, params, lc, data)
-    }
-}
-
-class UnknownCommand private constructor(
-    insByte: Int,
-    val data: ApduData?
-) : ApduCommand(ApduClass.standard, ApduInstruction(insByte, "INS (Unknown)"), "Unknown Command") {
-    companion object {
-        internal fun fromBytes(rawCommand: Bytes): UnknownCommand {
-            val insByte = rawCommand[1].toInt() and 0xFF
-            val data = if (rawCommand.size > 4) {
-                ApduData("Unknown Data", rawCommand.sliceArray(4 until rawCommand.size))
+            val dataLength = rawResponse.size - 2
+            val responseData = if (dataLength > 0) {
+                ApduData("Response Data (Parsed)", rawResponse.sliceArray(0 until dataLength))
             } else {
                 null
             }
-            return UnknownCommand(insByte, data)
+
+            val sw1 = rawResponse[dataLength].toInt() and 0xFF
+            val sw2 = rawResponse[dataLength + 1].toInt() and 0xFF
+            val statusWord = ApduStatusWord.fromBytes(sw1, sw2)
+
+            return ApduResponse(
+                data = responseData,
+                statusWord = statusWord,
+                name = "Parsed Response"
+            )
+        }
+
+        @JvmStatic
+        fun success(data: Bytes? = null): ApduResponse {
+            val responseData = if (data != null && data.isNotEmpty()) {
+                ApduData("Response Data", data)
+            } else {
+                null
+            }
+            return ApduResponse(
+                data = responseData,
+                statusWord = ApduStatusWord.ok,
+                name = "Success Response"
+            )
+        }
+
+        @JvmStatic
+        fun error(errorStatus: ApduStatusWord): ApduResponse {
+            require(errorStatus != ApduStatusWord.ok) { "Cannot create an error response with SW=9000. Use success() factory." }
+            return ApduResponse(
+                data = null,
+                statusWord = errorStatus,
+                name = "Error Response"
+            )
         }
     }
 
     override fun setFields() {
-        fields = listOf(cla, ins, data)
+        fields = listOf(data, statusWord)
     }
 }

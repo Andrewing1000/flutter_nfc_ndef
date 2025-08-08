@@ -1,11 +1,15 @@
 package io.flutter.plugins.nfc_host_card_emulation.app_layer
 
+import android.util.Log
+import androidx.annotation.GuardedBy
 import io.flutter.plugins.nfc_host_card_emulation.file_access.fields.ApduParams
 import io.flutter.plugins.nfc_host_card_emulation.file_access.fields.ApduStatusWord
 import io.flutter.plugins.nfc_host_card_emulation.file_access.serializers.*
 import io.flutter.plugins.nfc_host_card_emulation.ndef_format.NdefMessageSerializer
 import io.flutter.plugins.nfc_host_card_emulation.ndef_format.NdefRecordData
 import java.lang.Integer.min
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 
 private enum class HceState {
     IDLE,
@@ -48,17 +52,36 @@ private class NdefFile(
     }
 }
 
-class HceStateMachine(val aid: Bytes) {
+class HceStateMachine(aid: Bytes) {
+    private val stateLock = ReentrantLock()
+    private val fileSystemLock = ReentrantLock()
+    
+    val aid: Bytes = aid.clone() // Defensive copy
+    
+    @GuardedBy("stateLock")
     private var currentState: HceState = HceState.IDLE
+    
+    @GuardedBy("stateLock")
     private var selectedFileId: Int? = null
 
+    @GuardedBy("fileSystemLock")
     private var capabilityContainer: CapabilityContainer
+    
+    @GuardedBy("fileSystemLock")
     private val ndefFiles = mutableMapOf<Int, NdefFile>()
+    
+    @GuardedBy("fileSystemLock")
     private val fileDescriptors = mutableListOf<FileControlTlv>()
 
     companion object {
         const val CC_FILE_ID = 0xE103
         const val NDEF_FILE_ID = 0xE104
+        
+        private val RESERVED_FILE_IDS = setOf(
+            0x3F00, 0x3FFF,  // ISO/IEC 7816-4 reserved
+            0xE101, 0xE102,  // Reserved by Type 4 Tag spec
+            CC_FILE_ID       // CC file
+        )
     }
 
     init {
@@ -72,42 +95,65 @@ class HceStateMachine(val aid: Bytes) {
         maxFileSize: Int,
         isWritable: Boolean
     ) {
-        require(fileId != CC_FILE_ID && fileId in 0x0000..0xFFFF) { "Invalid File ID: $fileId" }
+        ValidationUtils.validateFileId(fileId)
+        ValidationUtils.validateNdefMessageSize(maxFileSize)
 
-        val message = NdefMessageSerializer.fromRecords(records)
-        val file = NdefFile(
-            message = message,
-            maxFileSize = maxFileSize,
-            isWritable = isWritable
-        )
-        ndefFiles[fileId] = file
-
-        val tlv = if (fileId == NDEF_FILE_ID) {
-            FileControlTlv.ndef(
-                maxNdefFileSize = maxFileSize,
-                isNdefWritable = isWritable
-            )
-        } else {
-            FileControlTlv.proprietary(
-                proprietaryFileId = fileId,
-                maxProprietaryFileSize = maxFileSize,
-                isProprietaryWritable = isWritable
-            )
+        if (fileId in RESERVED_FILE_IDS) {
+            throw InvalidFileIdError("File ID 0x${fileId.toString(16)} is reserved")
         }
 
-        fileDescriptors.removeAll {
-            val id = ((it.fileId.buffer[0].toInt() and 0xFF) shl 8) or (it.fileId.buffer[1].toInt() and 0xFF)
-            id == fileId
+        fileSystemLock.withLock {
+            try {
+                val message = NdefMessageSerializer.fromRecords(records)
+                val file = NdefFile(
+                    message = message,
+                    maxFileSize = maxFileSize,
+                    isWritable = isWritable
+                )
+                ndefFiles[fileId] = file
+
+                val tlv = if (fileId == NDEF_FILE_ID) {
+                    FileControlTlv.ndef(
+                        maxNdefFileSize = maxFileSize,
+                        isNdefWritable = isWritable
+                    )
+                } else {
+                    FileControlTlv.proprietary(
+                        proprietaryFileId = fileId,
+                        maxProprietaryFileSize = maxFileSize,
+                        isProprietaryWritable = isWritable
+                    )
+                }
+
+                fileDescriptors.removeAll {
+                    val id = ((it.fileId.buffer[0].toInt() and 0xFF) shl 8) or 
+                            (it.fileId.buffer[1].toInt() and 0xFF)
+                    id == fileId
+                }
+                fileDescriptors.add(tlv)
+                rebuildCapabilityContainer()
+            } catch (e: Exception) {
+                throw InvalidNdefFormatError("Failed to create NDEF file: ${e.message}")
+            }
         }
-        fileDescriptors.add(tlv)
-        rebuildCapabilityContainer()
     }
 
     fun deleteNdefFile(fileId: Int) {
-        if (ndefFiles.containsKey(fileId)) {
+        ValidationUtils.validateFileId(fileId)
+
+        if (fileId in RESERVED_FILE_IDS) {
+            throw InvalidFileIdError("Cannot delete reserved file 0x${fileId.toString(16)}")
+        }
+
+        fileSystemLock.withLock {
+            if (!ndefFiles.containsKey(fileId)) {
+                throw FileNotFoundError("File 0x${fileId.toString(16)} does not exist")
+            }
+
             ndefFiles.remove(fileId)
             fileDescriptors.removeAll {
-                val id = ((it.fileId.buffer[0].toInt() and 0xFF) shl 8) or (it.fileId.buffer[1].toInt() and 0xFF)
+                val id = ((it.fileId.buffer[0].toInt() and 0xFF) shl 8) or 
+                        (it.fileId.buffer[1].toInt() and 0xFF)
                 id == fileId
             }
             rebuildCapabilityContainer()
@@ -115,13 +161,18 @@ class HceStateMachine(val aid: Bytes) {
     }
 
     fun clearAllFiles() {
-        ndefFiles.clear()
-        fileDescriptors.clear()
-        rebuildCapabilityContainer()
+        fileSystemLock.withLock {
+            ndefFiles.clear()
+            fileDescriptors.clear()
+            rebuildCapabilityContainer()
+        }
     }
 
     fun hasFile(fileId: Int): Boolean {
-        return ndefFiles.containsKey(fileId)
+        ValidationUtils.validateFileId(fileId)
+        fileSystemLock.withLock {
+            return ndefFiles.containsKey(fileId)
+        }
     }
 
     fun onDeactivated() {
@@ -135,18 +186,32 @@ class HceStateMachine(val aid: Bytes) {
             if (command.cla != ApduClass.standard) {
                 return ApduResponse.error(ApduStatusWord.claNotSupported).buffer
             }
-            handleCommand(command).buffer
+
+            stateLock.withLock {
+                handleCommand(command).buffer
+            }
+        } catch (e: HceError) {
+            Log.e("HceStateMachine", "HCE Error: ${e.message}")
+            when (e) {
+                is InvalidStateError -> ApduResponse.error(ApduStatusWord.conditionsNotSatisfied)
+                is FileNotFoundError -> ApduResponse.error(ApduStatusWord.fileNotFound)
+                is BufferOverflowError -> ApduResponse.error(ApduStatusWord.wrongLength)
+                else -> ApduResponse.error(ApduStatusWord.conditionsNotSatisfied)
+            }.buffer
         } catch (e: Exception) {
-            println("HCE FSM Error: ${e.message}")
+            Log.e("HceStateMachine", "Unexpected error: ${e.message}")
             ApduResponse.error(ApduStatusWord.conditionsNotSatisfied).buffer
         }
     }
 
     private fun rebuildCapabilityContainer() {
-        capabilityContainer = CapabilityContainer(fileDescriptors = fileDescriptors)
+        fileSystemLock.withLock {
+            capabilityContainer = CapabilityContainer(fileDescriptors = fileDescriptors.toList())
+        }
     }
 
     private fun handleCommand(command: ApduCommand): ApduResponse {
+        // Called with stateLock held
         return when (currentState) {
             HceState.IDLE -> handleIdleState(command)
             HceState.NDEF_APP_SELECTED -> handleNdefAppSelectedState(command)

@@ -12,6 +12,11 @@ class ApduStatusWord private constructor(sw1: Int, sw2: Int, name: String) : Apd
         val conditionsNotSatisfied = ApduStatusWord(0x69, 0x85, "SW (Conditions Not Satisfied)")
         val insNotSupported = ApduStatusWord(0x6D, 0x00, "SW (INS Not Supported)")
         val claNotSupported = ApduStatusWord(0x6E, 0x00, "SW (CLA Not Supported)")
+
+        fun fromBytes(sw1: Int, sw2: Int): ApduStatusWord {
+            val name = "SW (Parsed: %02X %02X)".format(sw1, sw2)
+            return ApduStatusWord(sw1, sw2, name)
+        }
     }
 
     init {

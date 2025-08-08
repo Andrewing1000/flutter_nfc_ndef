@@ -1,74 +1,54 @@
 package io.flutter.plugins.nfc_host_card_emulation
 
-import android.util.Log
-
+import android.content.Intent
 import android.nfc.cardemulation.HostApduService
 import android.os.Bundle
-import android.content.Intent
+import android.util.Log
 
-class AndroidHceService: HostApduService() {
-  companion object {
-    var permanentApduResponses = false;
-    var listenOnlyConfiguredPorts = false;
+class AndroidHceService : HostApduService() {
 
-    var aid = byteArrayOf(0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00)
-    var cla : Byte = 0
-    var ins : Byte = 0xA4.toByte()
+    private val conditionsNotSatisfiedResponse = byteArrayOf(0x69, 0x85.toByte())
+    private val failureResponse = byteArrayOf(0x6F, 0x00)
 
-    var portData = mutableMapOf<Int, ByteArray>()
+    private fun ByteArray.toHex(): String = joinToString(" ") { "%02X".format(it) }
 
-    public fun byteArrayToString(array: ByteArray) : String
-    {
-      var str = "["
-      for(i in 0..array.size - 2) 
-        str += " ${array[i].toUByte().toString(16)},"
-      str += " ${array[array.size - 1].toUByte().toString(16)} ]"
+    override fun processCommandApdu(commandApdu: ByteArray?, extras: Bundle?): ByteArray {
+        if (commandApdu == null) {
+            return failureResponse
+        }
 
-      return str
-    } 
-  }
+        Log.d("HCE_SERVICE", "--> Command: ${commandApdu.toHex()}")
 
-  val SUCCESS = byteArrayOf(0x90.toByte(), 0x00)
-  val BAD_LENGTH = byteArrayOf(0x67, 0x00)  
-  val UNKNOWN_CLA = byteArrayOf(0x6E, 0x00)    
-  val UNKNOWN_INS = byteArrayOf(0x6D, 0x00)     
-  val UNSUPPORTED_CHANNEL = byteArrayOf(0x68, 0x81.toByte()) 
-  val FAILURE = byteArrayOf(0x6F, 0x00)    
+        val stateMachine = HceManager.stateMachine
 
-  override fun processCommandApdu(commandApdu: ByteArray,
-                                  extras: Bundle?): ByteArray {
-    Log.d("HCE", "APDU Command ${byteArrayToString(commandApdu)}")
+        if (stateMachine == null) {
+            Log.e("HCE_SERVICE", "HCE State Machine is not initialized. Flutter has not called init().")
+            return conditionsNotSatisfiedResponse
+        }
 
-    if(commandApdu[0] != cla) return UNKNOWN_CLA
-    if(commandApdu[1] != ins) return UNKNOWN_INS
 
-    val port : Int = commandApdu[3].toUByte().toInt()   
+        val responseApdu = stateMachine.processCommand(commandApdu)
 
-    if(commandApdu[4].toInt() != aid.size) return BAD_LENGTH
+        Log.d("HCE_SERVICE", "<-- Response: ${responseApdu.toHex()}")
 
-    for(i in 0..(aid.size - 1))
-        if(commandApdu[i + 5] != aid[i])
-            return UNSUPPORTED_CHANNEL   
+        Intent().also { intent ->
+            intent.action = "io.flutter.plugins.nfc_host_card_emulation.TRANSACTION"
+            intent.putExtra("command", commandApdu)
+            intent.putExtra("response", responseApdu)
+            sendBroadcast(intent)
+        }
 
-    val responseApdu = portData[port]
-
-    if(listenOnlyConfiguredPorts == false || responseApdu != null)
-    {
-      Intent().also { intent ->
-        intent.setAction("apduCommand")
-        intent.putExtra("port", port)
-        intent.putExtra("command", commandApdu.copyOfRange(0, aid.size + 5))
-        intent.putExtra("data", commandApdu.copyOfRange(aid.size + 5, commandApdu.size))
-        sendBroadcast(intent)
-      }   
+        return responseApdu
     }
 
-    if(responseApdu == null) return FAILURE
+    override fun onDeactivated(reason: Int) {
+        Log.d("HCE_SERVICE", "Deactivated, reason: $reason")
+        HceManager.stateMachine?.onDeactivated()
 
-    if(permanentApduResponses == false) portData.remove(port)    
-
-    return responseApdu + SUCCESS
-  }
-
-  override fun onDeactivated(reason: Int) {}  
+        Intent().also { intent ->
+            intent.action = "io.flutter.plugins.nfc_host_card_emulation.DEACTIVATED"
+            intent.putExtra("reason", reason)
+            sendBroadcast(intent)
+        }
+    }
 }

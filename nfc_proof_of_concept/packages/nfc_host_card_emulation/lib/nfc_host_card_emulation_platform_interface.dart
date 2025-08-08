@@ -1,45 +1,60 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:nfc_host_card_emulation/nfc_host_card_emulation.dart';
+import 'package:meta/meta.dart';
+import 'package:nfc_host_card_emulation/app_layer/file_access/serializers/apdu_command_serializer.dart';
+import 'package:nfc_host_card_emulation/app_layer/file_access/serializers/apdu_response_serializer.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
 import 'nfc_host_card_emulation_method_channel.dart';
 
+class HceTransaction {
+  final ApduCommand command;
+  final ApduResponse response;
+  HceTransaction({required Uint8List command, required Uint8List response})
+      : command = ApduCommand.fromBytes(command),
+        response = ApduResponse.fromBytes(response);
+}
+
+class NdefRecordData {
+  final String type;
+  final Uint8List payload;
+  NdefRecordData({required this.type, required this.payload});
+
+  Map<String, dynamic> toMap() {
+    return {'type': type, 'payload': payload};
+  }
+}
+
+enum NfcState { enabled, disabled, notSupported }
+
 abstract class NfcHostCardEmulationPlatform extends PlatformInterface {
-  /// Constructs a NfcHostCardEmulationPlatform.
   NfcHostCardEmulationPlatform() : super(token: _token);
-
   static final Object _token = Object();
-
   static NfcHostCardEmulationPlatform _instance =
       MethodChannelNfcHostCardEmulation();
-
-  /// The default instance of [NfcHostCardEmulationPlatform] to use.
-  ///
-  /// Defaults to [MethodChannelNfcHostCardEmulation].
   static NfcHostCardEmulationPlatform get instance => _instance;
-
-  /// Platform-specific implementations should set this with their own
-  /// platform-specific class that extends [NfcHostCardEmulationPlatform] when
-  /// they register themselves.
   static set instance(NfcHostCardEmulationPlatform instance) {
     PlatformInterface.verifyToken(instance, _token);
     _instance = instance;
   }
 
-  /// Initializes the HCE with the specified parameters
-  Future<void> init(
-    dynamic args,
-    StreamController<NfcApduCommand> streamController,
-  );
+  /// Disposes of any resources held by the platform implementation.
+  @mustCallSuper
+  void dispose() {}
 
-  /// Adds an APDU response to the specified port
-  Future<void> addApduResponse(int port, Uint8List data);
+  Future<void> init({required Uint8List aid});
+  Stream<HceTransaction> get transactionStream;
 
-  /// Removes an APDU response from the specified port
-  Future<void> removeApduResponse(int port);
+  Future<void> addOrUpdateNdefFile({
+    required int fileId,
+    required List<NdefRecordData> records,
+    int maxFileSize = 2048,
+    bool isWritable = false,
+  });
 
-  /// Checks device's NFC state
+  Future<void> deleteNdefFile({required int fileId});
+  Future<void> clearAllFiles();
+  Future<bool> hasFile({required int fileId});
   Future<NfcState> checkDeviceNfcState();
 }

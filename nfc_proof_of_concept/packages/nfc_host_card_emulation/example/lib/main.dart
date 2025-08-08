@@ -1,7 +1,7 @@
 import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:nfc_host_card_emulation/nfc_host_card_emulation.dart';
+import 'package:nfc_host_card_emulation/nfc_host_card_emulation_platform_interface.dart';
 
 late NfcState _nfcState;
 
@@ -12,17 +12,8 @@ void main() async {
 
   if (_nfcState == NfcState.enabled) {
     await NfcHce.init(
-      // AID that match at least one aid-filter in apduservice.xml
-      // In my case it is A000DADADADADA.
-      aid: Uint8List.fromList([0xA0, 0x00, 0xDA, 0xDA, 0xDA, 0xDA, 0xDA]),
-      // next parameter determines whether APDU responses from the ports
-      // on which the connection occurred will be deleted.
-      // If `true`, responses will be deleted, otherwise won't.
-      permanentApduResponses: true,
-      // next parameter determines whether APDU commands received on ports
-      // to which there are no responses will be added to the stream.
-      // If `true`, command won't be added, otherwise will.
-      listenOnlyConfiguredPorts: false,
+      // Standard NDEF application AID (D2760000850101)
+      aid: Uint8List.fromList([0xD2, 0x76, 0x00, 0x00, 0x85, 0x01, 0x01]),
     );
   }
 
@@ -37,22 +28,30 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  bool apduAdded = false;
+  bool hasNdefContent = false;
+  static const standardNdefFileId = 0xE104;
 
-  // change port here
-  final port = 0;
-  // change data to transmit here
-  final data = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+  String _bytesToHex(List<int> bytes) {
+    return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
+  }
 
-  // this will be changed in the NfcHce.stream listen callback
-  NfcApduCommand? nfcApduCommand;
+  // Sample NDEF record content
+  final records = [
+    NdefRecordData(
+      type: 'text/plain',
+      payload: Uint8List.fromList([0x48, 0x65, 0x6C, 0x6C, 0x6F]), // "Hello"
+    ),
+  ];
+
+  // Track the latest HCE transaction
+  HceTransaction? latestTransaction;
 
   @override
   void initState() {
     super.initState();
 
-    NfcHce.stream.listen((command) {
-      setState(() => nfcApduCommand = command);
+    NfcHce.stream.listen((transaction) {
+      setState(() => latestTransaction = transaction);
     });
   }
 
@@ -74,40 +73,55 @@ class _MyAppState extends State<MyApp> {
                   child: ElevatedButton(
                     style: ButtonStyle(
                       backgroundColor: MaterialStateProperty.all(
-                        apduAdded ? Colors.redAccent : Colors.greenAccent,
+                        hasNdefContent ? Colors.redAccent : Colors.greenAccent,
                       ),
                     ),
                     onPressed: () async {
-                      if (apduAdded == false) {
-                        await NfcHce.addApduResponse(port, data);
-                      } else {
-                        await NfcHce.removeApduResponse(port);
+                      try {
+                        if (!hasNdefContent) {
+                          // Add or update NDEF file
+                          await NfcHce.addOrUpdateNdefFile(
+                            fileId: standardNdefFileId,
+                            records: records,
+                            maxFileSize: 2048,
+                            isWritable: true,
+                          );
+                        } else {
+                          // Remove NDEF file
+                          await NfcHce.deleteNdefFile(
+                              fileId: standardNdefFileId);
+                        }
+                        setState(() => hasNdefContent = !hasNdefContent);
+                      } catch (e) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Error: $e')),
+                        );
                       }
-
-                      setState(() => apduAdded = !apduAdded);
                     },
                     child: FittedBox(
                       child: Text(
-                        apduAdded
-                            ? 'remove\n$data\nfrom\nport $port'
-                            : 'add\n$data\nto\nport $port',
+                        hasNdefContent
+                            ? 'Remove NDEF Content'
+                            : 'Add NDEF Content',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 26,
-                          color: apduAdded ? Colors.white : Colors.black,
+                          color: hasNdefContent ? Colors.white : Colors.black,
                         ),
                       ),
                     ),
                   ),
                 ),
-                if (nfcApduCommand != null)
-                  Text(
-                    'You listened to the stream and received the '
-                    'following command on the port ${nfcApduCommand!.port}:\n'
-                    '${nfcApduCommand!.command}\n'
-                    'with additional data ${nfcApduCommand!.data}',
-                    style: const TextStyle(fontSize: 20),
-                    textAlign: TextAlign.center,
+                if (latestTransaction != null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    child: Text(
+                      'Latest HCE Transaction:\n'
+                      'Command: ${latestTransaction!.command}\n'
+                      'Response: ${latestTransaction!.response}',
+                      style: const TextStyle(fontSize: 16),
+                      textAlign: TextAlign.center,
+                    ),
                   ),
               ],
             ),
@@ -125,7 +139,7 @@ class _MyAppState extends State<MyApp> {
       theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.green),
       home: Scaffold(
         appBar: AppBar(
-          title: const Text('NFC HCE example app'),
+          title: const Text('NFC HCE Example'),
         ),
         body: body,
       ),
