@@ -1,6 +1,9 @@
-package io.flutter.plugins.nfc_host_card_emulation.app_layer
+ import io.flutter.plugins.nfc_host_card_emulation.app_layer.InvalidAidError
+ import io.flutter.plugins.nfc_host_card_emulation.app_layer.InvalidFileIdError
+ import io.flutter.plugins.nfc_host_card_emulation.app_layer.InvalidNdefFormatError
+ 
 
-object ValidationUtils {
+ object ValidationUtils {
     fun validateAid(aid: ByteArray) {
         if (aid.size !in 5..16) {
             throw InvalidAidError("AID length must be between 5 and 16 bytes")

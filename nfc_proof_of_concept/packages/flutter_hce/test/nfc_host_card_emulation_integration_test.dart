@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nfc_host_card_emulation/nfc_host_card_emulation.dart';
+import 'package:flutter_hce/nfc_host_card_emulation.dart';
 import 'package:nfc_host_card_emulation/app_layer/errors.dart';
 
 import 'test_helper.dart';

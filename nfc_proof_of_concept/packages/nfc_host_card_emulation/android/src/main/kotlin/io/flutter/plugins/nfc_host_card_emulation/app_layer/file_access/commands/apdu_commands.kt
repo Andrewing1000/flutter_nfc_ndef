@@ -2,10 +2,10 @@ package io.flutter.plugins.nfc_host_card_emulation.app_layer.file_access.command
 
 enum class ApduClass(val value: Byte) {
     ISO7816_COMMAND(0x00),
-    APPLICATION_COMMAND(0x80),
-    APPLICATION_RESPONSE(0x80),
-    PROPRIETARY_COMMAND(0xC0),
-    PROPRIETARY_RESPONSE(0xC0)
+    APPLICATION_COMMAND(0x80.toByte()),
+    APPLICATION_RESPONSE(0x80.toByte()),
+    PROPRIETARY_COMMAND(0xC0.toByte()),
+    PROPRIETARY_RESPONSE(0xC0.toByte())
 }
 
 sealed class ApduCommand(
@@ -45,11 +45,11 @@ class ReadBinaryCommand(
 
 class UpdateBinaryCommand(
     val offset: Int,
-    val data: ByteArray
+    payload: ByteArray
 ) : ApduCommand(
     cla = ApduClass.ISO7816_COMMAND,
     ins = 0xD6.toByte(),
     p1 = ((offset shr 8) and 0xFF).toByte(),
     p2 = (offset and 0xFF).toByte(),
-    data = data
+    data = payload
 )

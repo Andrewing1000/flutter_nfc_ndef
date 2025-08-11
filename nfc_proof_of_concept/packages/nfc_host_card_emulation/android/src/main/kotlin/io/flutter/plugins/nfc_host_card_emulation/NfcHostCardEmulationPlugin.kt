@@ -19,6 +19,15 @@ import io.flutter.plugins.nfc_host_card_emulation.ndef_format.NdefRecordData
 import io.flutter.plugins.nfc_host_card_emulation.ndef_format.fields.NdefPayload
 import io.flutter.plugins.nfc_host_card_emulation.ndef_format.fields.NdefTypeField
 
+import io.flutter.plugins.nfc_host_card_emulation.app_layer.InvalidAidError
+import io.flutter.plugins.nfc_host_card_emulation.app_layer.InvalidStateError
+import io.flutter.plugins.nfc_host_card_emulation.app_layer.InvalidFileIdError
+import io.flutter.plugins.nfc_host_card_emulation.app_layer.InvalidNdefFormatError
+import io.flutter.plugins.nfc_host_card_emulation.app_layer.HceError
+import io.flutter.plugins.nfc_host_card_emulation.app_layer.FileNotFoundError
+import io.flutter.plugins.nfc_host_card_emulation.app_layer.toMethodChannelError
+
+
 class NfcHostCardEmulationPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
     private lateinit var channel: MethodChannel
     private var activity: Activity? = null
