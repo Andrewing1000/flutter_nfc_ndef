@@ -40,6 +40,7 @@ private class NdefFile(message: NdefMessageSerializer, val maxSize: Int) {
 }
 
 class HceStateMachine(
+    private val aid: ByteArray,
     initialMessage: NdefMessageSerializer,
     isWritable: Boolean = false,
     maxNdefFileSize: Int = 2048 // 2KB
@@ -56,11 +57,6 @@ class HceStateMachine(
     )
 
     private val ndefFile = NdefFile(initialMessage, maxNdefFileSize)
-
-    companion object {
-        // El AID estándar para la aplicación NDEF.
-        val NDEF_AID = byteArrayOf(0xA0.toByte(), 0x00, 0xDA.toByte(), 0xDA.toByte(), 0xDA.toByte(), 0xDA.toByte(), 0xDA.toByte())
-    }
 
     /**
      * Resets the state machine to its initial state.
@@ -136,7 +132,7 @@ class HceStateMachine(
                 else -> {
                     throw HceException(
                         HceErrorCode.FILE_NOT_FOUND,
-                        "File ID 0x${fileId.toString(16).padStart(4, '0').toUpperCase()} not found"
+                        "File ID 0x${fileId.toString(16).padStart(4, '0').toUpperCase(java.util.Locale.ROOT)} not found"
                     )
                 }
             }
@@ -188,10 +184,10 @@ class HceStateMachine(
         return ApduResponse.success(chunk)
     }
 
-    private fun isNdefAid(aid: Bytes): Boolean {
-        if (aid.size != NDEF_AID.size) return false
-        for (i in aid.indices) {
-            if (aid[i] != NDEF_AID[i]) return false
+    private fun isNdefAid(aidToCheck: Bytes): Boolean {
+        if (aidToCheck.size != aid.size) return false
+        for (i in aidToCheck.indices) {
+            if (aidToCheck[i] != aid[i]) return false
         }
         return true
     }

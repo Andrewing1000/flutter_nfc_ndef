@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 
+ARCHIVO: android/app/src/main/res/xml/apdu_service.xml
+PROPÓSITO: Definir los AIDs que el servicio HCE puede manejar
+
+IMPORTANTE: 
+- Los AIDs aquí deben coincidir con los que registras en Flutter
+- Cuando otra app NFC envía un comando a uno de estos AIDs, tu app se abrirá automáticamente
+-->
+
+<host-apdu-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/hce_service_name"
+    android:requireDeviceUnlock="false"
+    android:apduServiceBanner="@drawable/hce_banner">
+
+    <!-- GRUPO DE AIDs PARA FLUTTER HCE -->
+    <aid-group android:description="@string/aid_group_name" android:category="other">
+        
+        <!-- AID ESTÁNDAR NDEF - D2760000850101 -->
+        <!-- Este es el AID más común para aplicaciones NDEF -->
+        <aid-filter android:name="D2760000850101"/>
+        
+        <!-- AID PERSONALIZADO DE EJEMPLO - F0010203040506 -->
+        <!-- Puedes usar este patrón para crear tus propios AIDs -->
+        <aid-filter android:name="F0010203040506"/>
+        
+        <!-- AID PARA APLICACIÓN ESPECÍFICA - A000000476416E6F70 -->
+        <!-- Ejemplo de AID para una aplicación de pagos o identificación -->
+        <aid-filter android:name="A000000476416E6F70"/>
+        
+        <!-- AID CORTO DE 5 BYTES - F001020304 -->
+        <!-- Ejemplo de AID mínimo (5 bytes) -->
+        <aid-filter android:name="F001020304"/>
+        
+        <!-- AID LARGO DE 16 BYTES - F00102030405060708090A0B0C0D0E0F -->
+        <!-- Ejemplo de AID máximo (16 bytes) -->
+        <aid-filter android:name="F00102030405060708090A0B0C0D0E0F"/>
+
+    </aid-group>
+
+    <!-- OTRO GRUPO DE AIDs (OPCIONAL) -->
+    <!-- Puedes tener múltiples grupos para diferentes propósitos -->
+    <aid-group android:description="@string/aid_group_payments" android:category="payment">
+        
+        <!-- AID PARA PAGOS NFC (EJEMPLO) -->
+        <aid-filter android:name="A0000000041010"/>
+        
+    </aid-group>
+
+</host-apdu-service>

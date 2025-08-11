@@ -13,14 +13,20 @@ class MethodChannelFlutterHce extends FlutterHcePlatform {
   @visibleForTesting
   final eventChannel = const EventChannel('nfc_host_card_emulation_events');
 
+  /// Event channel for NFC Intent events (app launching)
+  @visibleForTesting
+  final intentEventChannel = const EventChannel('nfc_intent_events');
+
   @override
   Future<bool> init({
+    required Uint8List aid,
     required List<NdefRecord> records,
     bool isWritable = false,
     int maxNdefFileSize = 2048,
   }) async {
     try {
       final result = await methodChannel.invokeMethod<bool>('init', {
+        'aid': aid,
         'records': records.map((record) => record.toMap()).toList(),
         'isWritable': isWritable,
         'maxNdefFileSize': maxNdefFileSize,
@@ -53,10 +59,31 @@ class MethodChannelFlutterHce extends FlutterHcePlatform {
   }
 
   @override
+  Future<Map<String, dynamic>?> getNfcIntent() async {
+    try {
+      final result = await methodChannel
+          .invokeMethod<Map<Object?, Object?>>('getNfcIntent');
+      if (result == null) return null;
+
+      return result.map((key, value) => MapEntry(key.toString(), value));
+    } catch (e) {
+      print('Error getting NFC intent: $e');
+      return null;
+    }
+  }
+
+  @override
   Stream<HceTransactionEvent> get transactionEvents {
     return eventChannel.receiveBroadcastStream().map((event) {
       final Map<String, dynamic> data = Map<String, dynamic>.from(event);
       return HceTransactionEvent.fromMap(data);
+    });
+  }
+
+  @override
+  Stream<Map<String, dynamic>> get nfcIntentEvents {
+    return intentEventChannel.receiveBroadcastStream().map((event) {
+      return Map<String, dynamic>.from(event);
     });
   }
 }

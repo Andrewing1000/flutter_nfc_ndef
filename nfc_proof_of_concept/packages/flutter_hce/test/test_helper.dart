@@ -52,10 +52,12 @@ class TestHelper {
 
   /// Simulates initialization with test records
   static Future<bool> initWithTestRecords({
+    Uint8List? aid,
     List<NdefRecord>? records,
     bool isWritable = true,
     int maxNdefFileSize = 2048,
   }) async {
+    final testAid = aid ?? defaultTestAid;
     final testRecords = records ??
         [
           FlutterHce.createTextRecord('Test Message'),
@@ -63,6 +65,7 @@ class TestHelper {
         ];
 
     return await FlutterHce.init(
+      aid: testAid,
       records: testRecords,
       isWritable: isWritable,
       maxNdefFileSize: maxNdefFileSize,
@@ -136,4 +139,16 @@ class TestHelper {
   static const String defaultTestUri = 'https://flutter.dev';
   static const int defaultMaxFileSize = 2048;
   static const String defaultLanguage = 'en';
+
+  /// Default test AID (standard NDEF AID)
+  static Uint8List get defaultTestAid =>
+      Uint8List.fromList([0xD2, 0x76, 0x00, 0x00, 0x85, 0x01, 0x01]);
+
+  /// Creates a custom test AID
+  static Uint8List createCustomTestAid(List<int> aidBytes) {
+    if (aidBytes.length < 5 || aidBytes.length > 16) {
+      throw ArgumentError('AID must be between 5 and 16 bytes');
+    }
+    return Uint8List.fromList(aidBytes);
+  }
 }

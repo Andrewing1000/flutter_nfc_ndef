@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="hce_service_description">Flutter HCE Service for NDEF emulation</string>
+    <string name="hce_aid_group_description">Standard NDEF AIDs for Host Card Emulation</string>
+</resources>

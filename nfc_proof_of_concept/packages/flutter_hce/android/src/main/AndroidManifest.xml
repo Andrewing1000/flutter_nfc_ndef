@@ -1,2 +1,27 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- NFC permissions required for Host Card Emulation -->
+    <uses-permission android:name="android.permission.NFC" />
+    
+    <!-- Required for HCE functionality -->
+    <uses-feature
+        android:name="android.hardware.nfc.hce"
+        android:required="true" />
+    
+    <application>
+        <!-- Host Card Emulation Service -->
+        <service
+            android:name="com.viridian.flutter_hce.HceService"
+            android:exported="true"
+            android:permission="android.permission.BIND_NFC_SERVICE">
+            
+            <intent-filter>
+                <action android:name="android.nfc.cardemulation.action.HOST_APDU_SERVICE" />
+            </intent-filter>
+            
+            <!-- AID configuration -->
+            <meta-data
+                android:name="android.nfc.cardemulation.host_apdu_service"
+                android:resource="@xml/hce_aid_list" />
+        </service>
+    </application>
 </manifest>

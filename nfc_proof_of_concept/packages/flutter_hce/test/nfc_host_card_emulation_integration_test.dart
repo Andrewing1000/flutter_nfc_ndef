@@ -6,8 +6,12 @@ import 'package:flutter_hce/flutter_hce.dart';
 void main() {
   group('FlutterHce Integration Tests', () {
     late List<NdefRecord> testRecords;
+    late Uint8List testAid;
 
     setUp(() async {
+      // Standard NDEF AID for testing
+      testAid = Uint8List.fromList([0xD2, 0x76, 0x00, 0x00, 0x85, 0x01, 0x01]);
+
       // Create test records for each test
       testRecords = [
         FlutterHce.createTextRecord('Test Message 1'),
@@ -15,7 +19,7 @@ void main() {
       ];
 
       // Initialize HCE for each test
-      await FlutterHce.init(records: testRecords);
+      await FlutterHce.init(aid: testAid, records: testRecords);
     });
 
     testWidgets('HCE initialization test', (tester) async {
@@ -68,6 +72,7 @@ void main() {
       ];
 
       final success = await FlutterHce.init(
+        aid: testAid,
         records: mixedRecords,
         isWritable: false,
         maxNdefFileSize: 4096,
@@ -87,6 +92,7 @@ void main() {
       ];
 
       final success = await FlutterHce.init(
+        aid: testAid,
         records: largeRecords,
         maxNdefFileSize: 2048, // 2KB limit
       );
@@ -124,7 +130,7 @@ void main() {
     testWidgets('Reinitialize with different records test', (tester) async {
       // Initialize with first set of records
       final firstRecords = [FlutterHce.createTextRecord('First message')];
-      await FlutterHce.init(records: firstRecords);
+      await FlutterHce.init(aid: testAid, records: firstRecords);
       expect(await FlutterHce.isStateMachineInitialized(), true);
 
       // Reinitialize with different records
@@ -133,7 +139,8 @@ void main() {
         FlutterHce.createUriRecord('https://updated.com'),
       ];
 
-      final success = await FlutterHce.init(records: secondRecords);
+      final success =
+          await FlutterHce.init(aid: testAid, records: secondRecords);
       expect(success, true,
           reason: 'Should be able to reinitialize with different records');
     });
@@ -141,7 +148,7 @@ void main() {
     testWidgets('Error handling test', (tester) async {
       // Test initialization with empty records
       expect(
-        () async => await FlutterHce.init(records: []),
+        () async => await FlutterHce.init(aid: testAid, records: []),
         throwsA(isA<FlutterHceException>()),
         reason: 'Should throw exception for empty records list',
       );
@@ -152,6 +159,7 @@ void main() {
 
       expect(
         () async => await FlutterHce.init(
+          aid: testAid,
           records: oversizedRecords,
           maxNdefFileSize: 1024, // 1KB limit - smaller than content
         ),

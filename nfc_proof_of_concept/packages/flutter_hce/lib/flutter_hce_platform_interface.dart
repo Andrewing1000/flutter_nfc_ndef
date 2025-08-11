@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
 import 'flutter_hce_method_channel.dart';
@@ -25,6 +26,7 @@ abstract class FlutterHcePlatform extends PlatformInterface {
 
   /// Initialize HCE with NDEF records
   Future<bool> init({
+    required Uint8List aid,
     required List<NdefRecord> records,
     bool isWritable = false,
     int maxNdefFileSize = 2048,
@@ -43,8 +45,18 @@ abstract class FlutterHcePlatform extends PlatformInterface {
         'isStateMachineInitialized() has not been implemented.');
   }
 
+  /// Get NFC intent data if the app was launched via NFC
+  Future<Map<String, dynamic>?> getNfcIntent() {
+    throw UnimplementedError('getNfcIntent() has not been implemented.');
+  }
+
   /// Stream of HCE transaction events
   Stream<HceTransactionEvent> get transactionEvents {
     throw UnimplementedError('transactionEvents has not been implemented.');
+  }
+
+  /// Stream of NFC Intent events (for app launching)
+  Stream<Map<String, dynamic>> get nfcIntentEvents {
+    throw UnimplementedError('nfcIntentEvents has not been implemented.');
   }
 }

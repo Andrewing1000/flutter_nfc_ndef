@@ -16,10 +16,15 @@ class MockFlutterHcePlatform
 
   @override
   Future<bool> init({
+    required Uint8List aid,
     required List<NdefRecord> records,
     bool isWritable = false,
     int maxNdefFileSize = 2048,
   }) async {
+    if (aid.length < 5 || aid.length > 16) {
+      throw FlutterHceException('AID must be between 5 and 16 bytes');
+    }
+
     if (records.isEmpty) {
       throw FlutterHceException('Records list cannot be empty');
     }
@@ -69,6 +74,10 @@ class MockFlutterHcePlatform
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  // Standard NDEF AID for testing
+  final testAid =
+      Uint8List.fromList([0xD2, 0x76, 0x00, 0x00, 0x85, 0x01, 0x01]);
+
   group('Flutter HCE Tests', () {
     late MockFlutterHcePlatform mockPlatform;
 
@@ -88,14 +97,14 @@ void main() {
           FlutterHce.createUriRecord('https://flutter.dev'),
         ];
 
-        final success = await FlutterHce.init(records: records);
+        final success = await FlutterHce.init(aid: testAid, records: records);
         expect(success, true);
         expect(await FlutterHce.isStateMachineInitialized(), true);
       });
 
       test('fails initialization with empty records', () async {
         expect(
-          () async => await FlutterHce.init(records: []),
+          () async => await FlutterHce.init(aid: testAid, records: []),
           throwsA(isA<FlutterHceException>()),
         );
       });
@@ -104,6 +113,7 @@ void main() {
         final records = [FlutterHce.createTextRecord('Test Message')];
 
         final success = await FlutterHce.init(
+          aid: testAid,
           records: records,
           isWritable: true,
           maxNdefFileSize: 4096,
@@ -119,6 +129,7 @@ void main() {
 
         expect(
           () async => await FlutterHce.init(
+            aid: testAid,
             records: records,
             maxNdefFileSize: 1024, // Smaller than content
           ),
@@ -232,7 +243,7 @@ void main() {
           ),
         ];
 
-        final success = await FlutterHce.init(records: records);
+        final success = await FlutterHce.init(aid: testAid, records: records);
         expect(success, true);
         expect(mockPlatform.currentRecords.length, 3);
       });
@@ -244,7 +255,7 @@ void main() {
           'Message 3',
         ]);
 
-        final success = await FlutterHce.init(records: records);
+        final success = await FlutterHce.init(aid: testAid, records: records);
         expect(success, true);
         expect(mockPlatform.currentRecords.length, 3);
       });
@@ -252,7 +263,7 @@ void main() {
       test('reinitializes with different records', () async {
         // First initialization
         final firstRecords = [FlutterHce.createTextRecord('First message')];
-        await FlutterHce.init(records: firstRecords);
+        await FlutterHce.init(aid: testAid, records: firstRecords);
         expect(mockPlatform.currentRecords.length, 1);
 
         // Reinitialize with different records
@@ -261,7 +272,8 @@ void main() {
           FlutterHce.createUriRecord('https://updated.com'),
         ];
 
-        final success = await FlutterHce.init(records: secondRecords);
+        final success =
+            await FlutterHce.init(aid: testAid, records: secondRecords);
         expect(success, true);
         expect(mockPlatform.currentRecords.length, 2);
       });
