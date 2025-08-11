@@ -113,9 +113,7 @@ class _MyAppState extends State<MyApp> {
     );
   }
 
-  // Navegar a la pantalla específica de NFC
   void _navigateToNfcScreen(Map<String, dynamic> intentData) {
-    // Solo navegar si la aplicación está en primer plano
     if (navigatorKey.currentContext != null) {
       Navigator.of(navigatorKey.currentContext!).push(
         MaterialPageRoute(

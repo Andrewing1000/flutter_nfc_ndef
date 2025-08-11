@@ -32,17 +32,13 @@ class NfcHostCardEmulationPlugin : FlutterPlugin, MethodCallHandler, ActivityAwa
     private var eventSink: EventSink? = null
     private var intentEventSink: EventSink? = null
     
-    // ===== COMPONENTES ANDROID =====
     private var activity: Activity? = null
     private var nfcAdapter: NfcAdapter? = null
     private var stateMachine: HceStateMachine? = null
     
-    // ===== NFC INTENT LAUNCHING =====
     private var cachedNfcIntent: Intent? = null
 
-    /**
-     * BroadcastReceiver para eventos HCE desde el servicio Android
-     */
+    
     private val hceBroadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
@@ -59,9 +55,6 @@ class NfcHostCardEmulationPlugin : FlutterPlugin, MethodCallHandler, ActivityAwa
                     
                     // Enviar a Flutter via EventChannel
                     eventSink?.success(eventData)
-                    
-                    // Enviar también via MethodChannel (compatibilidad)
-                    channel.invokeMethod("onHceTransaction", eventData)
                 }
                 
                 "io.flutter.plugins.nfc_host_card_emulation.DEACTIVATED" -> {
@@ -75,29 +68,23 @@ class NfcHostCardEmulationPlugin : FlutterPlugin, MethodCallHandler, ActivityAwa
                     
                     // Enviar a Flutter
                     eventSink?.success(eventData)
-                    channel.invokeMethod("onHceDeactivated", eventData)
                 }
             }
         }
     }
 
-    // ===== FLUTTER PLUGIN LIFECYCLE =====
 
     override fun onAttachedToEngine(flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
         Log.d(TAG, "Plugin attached to engine")
         
-        // Configurar singleton
         setInstance(this)
         
-        // ✅ CONFIGURAR METHODCHANNEL
         channel = MethodChannel(flutterPluginBinding.binaryMessenger, "nfc_host_card_emulation")
         channel.setMethodCallHandler(this)
         
-        // ✅ CONFIGURAR EVENTCHANNEL PARA TRANSACCIONES HCE
         eventChannel = EventChannel(flutterPluginBinding.binaryMessenger, "nfc_host_card_emulation_events")
         eventChannel.setStreamHandler(this)
         
-        // ✅ CONFIGURAR EVENTCHANNEL PARA INTENTS NFC
         intentEventChannel = EventChannel(flutterPluginBinding.binaryMessenger, "nfc_intent_events")
         intentEventChannel.setStreamHandler(object : StreamHandler {
             override fun onListen(arguments: Any?, events: EventSink?) {
@@ -131,14 +118,12 @@ class NfcHostCardEmulationPlugin : FlutterPlugin, MethodCallHandler, ActivityAwa
 
         binding.addOnNewIntentListener(this)
         
-        // Registrar BroadcastReceiver para eventos HCE
         val intentFilter = IntentFilter().apply {
             addAction("io.flutter.plugins.nfc_host_card_emulation.TRANSACTION")
             addAction("io.flutter.plugins.nfc_host_card_emulation.DEACTIVATED")
         }
         activity?.registerReceiver(hceBroadcastReceiver, intentFilter)
         
-        // Verificar si la activity se abrió por NFC
         handleNfcIntent(activity?.intent)
         
         Log.d(TAG, "Activity setup complete - NFC: ${nfcAdapter?.isEnabled}")
@@ -180,32 +165,39 @@ class NfcHostCardEmulationPlugin : FlutterPlugin, MethodCallHandler, ActivityAwa
         when (intent.action) {
             NfcAdapter.ACTION_TECH_DISCOVERED,
             NfcAdapter.ACTION_NDEF_DISCOVERED -> {
-                Log.d(TAG, "✅ NFC intent detected - app launched/resumed via HCE")
+                Log.d(TAG, "NFC intent detected - app launched/resumed via HCE")
                 
-                // Extraer datos NFC
                 val nfcData = extractNfcData(intent)
                 
-                // Cachear intent para Flutter
                 cachedNfcIntent = intent
                 
-                // Notificar a Flutter
                 val eventData = mapOf(
                     "type" to "nfc_intent",
                     "action" to intent.action,
                     "data" to nfcData
                 )
                 
-                // Enviar via EventChannel de Intents NFC (para navegación automática)
                 intentEventSink?.success(eventData)
-                
-                // Enviar via EventChannel principal (compatibilidad)
-                eventSink?.success(eventData)
-                
-                // Enviar via MethodChannel (compatibilidad)
-                channel.invokeMethod("onNfcIntentReceived", eventData)
                 
                 return true
             }
+        }
+
+        if (intent.getBooleanExtra("launched_via_hce", false)) {
+            Log.d(TAG, "HCE auto-launch intent detected (non-NFC action): ${intent.action}")
+            val data = extractNfcData(intent)
+
+            cachedNfcIntent = intent
+
+            val eventData = mapOf(
+                "type" to "hce_launch",
+                "action" to (intent.action ?: ""),
+                "data" to data
+            )
+
+            intentEventSink?.success(eventData)
+
+            return true
         }
         return false
     }
@@ -238,12 +230,14 @@ class NfcHostCardEmulationPlugin : FlutterPlugin, MethodCallHandler, ActivityAwa
                 }
             }
         }
+        if (intent.hasExtra("launched_via_hce")) {
+            extras["launched_via_hce"] = intent.getBooleanExtra("launched_via_hce", false)
+            extras["hce_event"] = intent.getStringExtra("hce_event") ?: ""
+        }
         data["extras"] = extras
         
         return data
     }
-
-    // ===== EVENTCHANNEL STREAMHANDLER =====
 
     override fun onListen(arguments: Any?, events: EventSink?) {
         Log.d(TAG, "EventChannel listener attached")
@@ -292,10 +286,8 @@ class NfcHostCardEmulationPlugin : FlutterPlugin, MethodCallHandler, ActivityAwa
 
         Log.d(TAG, "Initializing HCE with AID: ${aid.joinToString { "%02X".format(it) }}")
 
-        // Por ahora, crear un mensaje NDEF simple para testing
         val simpleRecords = mutableListOf<NdefRecordTuple>()
         
-        // Crear un record de texto simple
         if (recordsData.isNotEmpty()) {
             val firstRecord = recordsData[0]
             val typeString = firstRecord["type"] as? String ?: "T"
@@ -304,18 +296,17 @@ class NfcHostCardEmulationPlugin : FlutterPlugin, MethodCallHandler, ActivityAwa
             val recordTuple = NdefRecordTuple(
                 type = NdefTypeField.wellKnown(typeString),
                 payload = if (payloadData.isNotEmpty()) NdefPayload(payloadData) else null,
-                id = null // Simplificar por ahora
+                id = null 
             )
             simpleRecords.add(recordTuple)
             
             Log.d(TAG, "Added NDEF record: type=$typeString, payload=${payloadData.size} bytes")
         }
 
-        // Crear NDEF message usando el constructor que funciona
         val ndefMessage = NdefMessageSerializer.fromRecords(simpleRecords)
         
-        // ✅ CREAR STATE MACHINE CON AID CONFIGURABLE
-        stateMachine = HceStateMachine(aid, ndefMessage, isWritable, maxNdefFileSize)
+    stateMachine = HceStateMachine(aid, ndefMessage, isWritable, maxNdefFileSize)
+    HceManager.stateMachine = stateMachine
         
         Log.d(TAG, "✅ HCE initialized successfully")
         result.success(true)
@@ -351,7 +342,6 @@ class NfcHostCardEmulationPlugin : FlutterPlugin, MethodCallHandler, ActivityAwa
             Log.d(TAG, "Returning cached NFC intent data")
             result.success(intentData)
             
-            // Limpiar cache después de usar
             cachedNfcIntent = null
         } else {
             Log.d(TAG, "No cached NFC intent data")

@@ -33,7 +33,6 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
             
-            <!-- NFC Intent Filters for launching app via NFC -->
             <intent-filter>
                 <action android:name="android.nfc.action.TECH_DISCOVERED" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -45,15 +44,13 @@
                 <data android:mimeType="application/vnd.android.nfc" />
             </intent-filter>
             
-            <!-- Meta-data for NFC tech filter -->
             <meta-data 
                 android:name="android.nfc.action.TECH_DISCOVERED"
                 android:resource="@xml/nfc_tech_filter" />
         </activity>
-        
-        <!-- Host Card Emulation Service -->
+
         <service
-            android:name="com.viridian.flutter_hce.HceService"
+            android:name="com.viridian.flutter_hce.AndroidHceService"
             android:exported="true"
             android:permission="android.permission.BIND_NFC_SERVICE">
             

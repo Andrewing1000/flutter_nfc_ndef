@@ -5,15 +5,12 @@ import 'flutter_hce_platform_interface.dart';
 
 /// An implementation of [FlutterHcePlatform] that uses method channels.
 class MethodChannelFlutterHce extends FlutterHcePlatform {
-  /// The method channel used to interact with the native platform.
   @visibleForTesting
   final methodChannel = const MethodChannel('nfc_host_card_emulation');
 
-  /// Event channel for HCE transaction events
   @visibleForTesting
   final eventChannel = const EventChannel('nfc_host_card_emulation_events');
 
-  /// Event channel for NFC Intent events (app launching)
   @visibleForTesting
   final intentEventChannel = const EventChannel('nfc_intent_events');
 

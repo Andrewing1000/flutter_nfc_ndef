@@ -58,28 +58,19 @@ class FlutterHce {
     return _platform.nfcIntentEvents;
   }
 
-  /// Get NFC intent data if the app was launched via NFC
-  ///
-  /// Returns null if the app was not launched via NFC
-  /// Call this in initState() to check if the app was opened by NFC
   static Future<Map<String, dynamic>?> getNfcIntent() async {
     return await _platform.getNfcIntent();
   }
 
-  /// Check if the app was launched via NFC
-  ///
-  /// Convenience method that returns true if getNfcIntent() returns non-null data
   static Future<bool> wasLaunchedViaHce() async {
     final intent = await getNfcIntent();
     return intent != null;
   }
 
-  /// Helper method to create a text NDEF record
   static NdefRecord createTextRecord(String text, {String language = 'en'}) {
-    // Text Record payload format: [flags][language_code][text]
     final languageBytes = Uint8List.fromList(language.codeUnits);
     final textBytes = Uint8List.fromList(text.codeUnits);
-    final flags = languageBytes.length; // No encoding flag (UTF-8)
+    final flags = languageBytes.length; 
 
     final payload = Uint8List(1 + languageBytes.length + textBytes.length);
     payload[0] = flags;
