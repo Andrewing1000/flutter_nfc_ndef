@@ -1,0 +1,6 @@
+{
+  "java.project.sourcePaths": ["src/main/kotlin"],
+  "java.project.outputPath": "build",
+  "java.project.referencedLibraries": ["lib/**/*.jar"],
+  "kotlin.compiler.jvm.target": "1.8"
+}

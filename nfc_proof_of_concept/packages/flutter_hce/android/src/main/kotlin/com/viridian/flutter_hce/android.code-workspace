@@ -1,0 +1,14 @@
+{
+  "folders": [
+    {
+      "path": "../../../../../../../example/android"
+    },
+    {
+      "path": "../../../../../../.."
+    }
+  ],
+  "settings": {
+    "java.compile.nullAnalysis.mode": "automatic",
+    "java.configuration.updateBuildConfiguration": "automatic"
+  }
+}
