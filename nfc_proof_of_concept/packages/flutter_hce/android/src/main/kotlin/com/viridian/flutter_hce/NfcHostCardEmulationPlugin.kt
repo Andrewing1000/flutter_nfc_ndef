@@ -13,16 +13,21 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
+import io.flutter.plugin.common.EventChannel
+import io.flutter.plugin.common.EventChannel.EventSink
+import io.flutter.plugin.common.EventChannel.StreamHandler
 import com.viridian.flutter_hce.app_layer.*
 import com.viridian.flutter_hce.app_layer.ndef_format.fields.*
 import com.viridian.flutter_hce.app_layer.ndef_format.serializers.*
 
 
-class NfcHostCardEmulationPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
+class NfcHostCardEmulationPlugin : FlutterPlugin, MethodCallHandler, ActivityAware, StreamHandler {
     private lateinit var channel: MethodChannel
+    private lateinit var eventChannel: EventChannel
     private var activity: Activity? = null
     private var nfcAdapter: NfcAdapter? = null
     private var stateMachine: HceStateMachine? = null
+    private var eventSink: EventSink? = null
 
     private val hceBroadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -31,11 +36,22 @@ class NfcHostCardEmulationPlugin : FlutterPlugin, MethodCallHandler, ActivityAwa
                     val command = intent.getByteArrayExtra("command")
                     val response = intent.getByteArrayExtra("response")
                     val eventData = mapOf("command" to command, "response" to response)
+                    
+                    // Send to method channel (legacy support)
                     channel.invokeMethod("onHceTransaction", eventData)
+                    
+                    // Send to event stream
+                    eventSink?.success(eventData)
                 }
                 "io.flutter.plugins.nfc_host_card_emulation.DEACTIVATED" -> {
                     val reason = intent.getIntExtra("reason", 0)
+                    val eventData = mapOf("reason" to reason)
+                    
+                    // Send to method channel (legacy support)
                     channel.invokeMethod("onHceDeactivated", reason)
+                    
+                    // Send to event stream
+                    eventSink?.success(eventData)
                 }
             }
         }
@@ -44,10 +60,14 @@ class NfcHostCardEmulationPlugin : FlutterPlugin, MethodCallHandler, ActivityAwa
     override fun onAttachedToEngine(flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
         channel = MethodChannel(flutterPluginBinding.binaryMessenger, "nfc_host_card_emulation")
         channel.setMethodCallHandler(this)
+        
+        eventChannel = EventChannel(flutterPluginBinding.binaryMessenger, "nfc_host_card_emulation_events")
+        eventChannel.setStreamHandler(this)
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         channel.setMethodCallHandler(null)
+        eventChannel.setStreamHandler(null)
     }
 
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
@@ -68,6 +88,15 @@ class NfcHostCardEmulationPlugin : FlutterPlugin, MethodCallHandler, ActivityAwa
 
     override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) { onAttachedToActivity(binding) }
     override fun onDetachedFromActivityForConfigChanges() { onDetachedFromActivity() }
+
+    // StreamHandler implementation for EventChannel
+    override fun onListen(arguments: Any?, events: EventSink?) {
+        eventSink = events
+    }
+
+    override fun onCancel(arguments: Any?) {
+        eventSink = null
+    }
 
     override fun onMethodCall(call: MethodCall, result: Result) {
         try {

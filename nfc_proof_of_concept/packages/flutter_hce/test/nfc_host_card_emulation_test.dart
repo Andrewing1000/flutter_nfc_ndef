@@ -1,255 +1,302 @@
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nfc_host_card_emulation/app_layer/errors.dart';
-import 'package:nfc_host_card_emulation/app_layer/validation.dart';
-import 'package:nfc_host_card_emulation/nfc_host_card_emulation.dart';
-import 'package:nfc_host_card_emulation/nfc_host_card_emulation_platform_interface.dart';
+import 'package:flutter_hce/flutter_hce.dart';
+import 'package:flutter_hce/flutter_hce_platform_interface.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
-class MockNfcHostCardEmulationPlatform
+import 'test_helper.dart';
+
+/// Mock platform implementation for testing
+class MockFlutterHcePlatform
     with MockPlatformInterfaceMixin
-    implements NfcHostCardEmulationPlatform {
+    implements FlutterHcePlatform {
   bool initialized = false;
-  final Map<int, List<NdefRecordData>> files = {};
+  List<NdefRecord> currentRecords = [];
+  String nfcState = 'enabled';
 
   @override
-  Future<void> init({required Uint8List aid}) async {
-    if (aid.length < 5 || aid.length > 16) {
-      throw HceException(
-          HceErrorCode.invalidAid, "AID length must be between 5 and 16 bytes");
-    }
-    initialized = true;
-  }
-
-  @override
-  Stream<HceTransaction> get transactionStream =>
-      Stream.empty(); // Mock stream for testing
-
-  @override
-  Future<void> addOrUpdateNdefFile({
-    required int fileId,
-    required List<NdefRecordData> records,
-    int maxFileSize = 2048,
+  Future<bool> init({
+    required List<NdefRecord> records,
     bool isWritable = false,
+    int maxNdefFileSize = 2048,
   }) async {
-    if (!initialized) {
-      throw HceException(HceErrorCode.invalidState, "Not initialized");
-    }
-    ValidationUtils.validateFileId(fileId);
     if (records.isEmpty) {
-      throw HceException(HceErrorCode.invalidNdefFormat, "Empty records list");
+      throw FlutterHceException('Records list cannot be empty');
     }
 
-    // Calculate total size of all records
+    // Calculate total size
     int totalSize = 0;
     for (var record in records) {
-      totalSize += record.payload.length;
-      if (record.type.isNotEmpty) {
-        totalSize += record.type.length;
-      }
+      totalSize +=
+          record.payload.length + record.type.length + 10; // Header overhead
     }
 
-    // Add overhead for NDEF record headers and TLV structure
-    totalSize += records.length * 6; // Approximate header size per record
-    totalSize += 4; // TLV overhead
-
-    if (totalSize > maxFileSize) {
-      throw HceException(HceErrorCode.messageTooLarge,
-          "Message size ($totalSize bytes) exceeds maximum file size ($maxFileSize bytes)");
+    if (totalSize > maxNdefFileSize) {
+      throw FlutterHceException(
+          'Content size ($totalSize bytes) exceeds maximum file size ($maxNdefFileSize bytes)');
     }
 
-    files[fileId] = List.from(records);
+    currentRecords = List.from(records);
+    initialized = true;
+    return true;
   }
 
   @override
-  Future<void> deleteNdefFile({required int fileId}) async {
-    if (!initialized) {
-      throw HceException(HceErrorCode.invalidState, "Not initialized");
-    }
-    if (!files.containsKey(fileId)) {
-      throw HceException(HceErrorCode.fileNotFound, "File not found");
-    }
-    files.remove(fileId);
+  Future<String> checkNfcState() async {
+    return nfcState;
   }
 
   @override
-  Future<void> clearAllFiles() async {
-    if (!initialized) {
-      throw HceException(HceErrorCode.invalidState, "Not initialized");
-    }
-    files.clear();
+  Future<bool> isStateMachineInitialized() async {
+    return initialized;
   }
 
   @override
-  Future<bool> hasFile({required int fileId}) async {
-    if (!initialized) {
-      throw HceException(HceErrorCode.invalidState, "Not initialized");
-    }
-    return files.containsKey(fileId);
+  Stream<HceTransactionEvent> get transactionEvents =>
+      Stream.empty(); // Mock stream for testing
+
+  void setNfcState(String state) {
+    nfcState = state;
   }
 
-  @override
-  Future<NfcState> checkDeviceNfcState() async {
-    return NfcState.enabled;
-  }
-
-  @override
-  Future<void> dispose() async {
+  void reset() {
     initialized = false;
-    files.clear();
+    currentRecords.clear();
+    nfcState = 'enabled';
   }
 }
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  group('NFC Host Card Emulation', () {
-    late MockNfcHostCardEmulationPlatform mockPlatform;
+  group('Flutter HCE Tests', () {
+    late MockFlutterHcePlatform mockPlatform;
 
     setUp(() {
-      mockPlatform = MockNfcHostCardEmulationPlatform();
-      NfcHostCardEmulationPlatform.instance = mockPlatform;
+      mockPlatform = MockFlutterHcePlatform();
+      FlutterHcePlatform.instance = mockPlatform;
     });
 
-    test('initializes with valid AID', () async {
-      final aid =
-          Uint8List.fromList([0xD2, 0x76, 0x00, 0x00, 0x85, 0x01, 0x01]);
-      await NfcHce.init(aid: aid);
-      expect(mockPlatform.initialized, true);
+    tearDown(() {
+      mockPlatform.reset();
     });
 
-    test('fails initialization with invalid AID', () async {
-      final aid = Uint8List.fromList([0x01, 0x02]); // Too short
-      expect(
-          () => NfcHce.init(aid: aid),
-          throwsA(predicate(
-              (e) => e is HceException && e.code == HceErrorCode.invalidAid)));
-    });
-
-    group('NDEF File Management', () {
-      setUp(() async {
-        final aid =
-            Uint8List.fromList([0xD2, 0x76, 0x00, 0x00, 0x85, 0x01, 0x01]);
-        await NfcHce.init(aid: aid);
-      });
-
-      test('adds NDEF file with valid data', () async {
+    group('Initialization Tests', () {
+      test('initializes with valid NDEF records', () async {
         final records = [
-          NdefRecordData(
-              type: 'text/plain',
-              payload:
-                  Uint8List.fromList([0x48, 0x65, 0x6C, 0x6C, 0x6F]) // "Hello"
-              )
+          FlutterHce.createTextRecord('Hello World!'),
+          FlutterHce.createUriRecord('https://flutter.dev'),
         ];
 
-        await NfcHce.addOrUpdateNdefFile(fileId: 0xE104, records: records);
-
-        expect(await NfcHce.hasFile(fileId: 0xE104), true);
+        final success = await FlutterHce.init(records: records);
+        expect(success, true);
+        expect(await FlutterHce.isStateMachineInitialized(), true);
       });
 
-      test('fails to add file with invalid ID', () async {
-        final records = [
-          NdefRecordData(
-              type: 'text/plain',
-              payload: Uint8List.fromList([0x48, 0x65, 0x6C, 0x6C, 0x6F]))
-        ];
+      test('fails initialization with empty records', () async {
+        expect(
+          () async => await FlutterHce.init(records: []),
+          throwsA(isA<FlutterHceException>()),
+        );
+      });
+
+      test('supports custom initialization parameters', () async {
+        final records = [FlutterHce.createTextRecord('Test Message')];
+
+        final success = await FlutterHce.init(
+          records: records,
+          isWritable: true,
+          maxNdefFileSize: 4096,
+        );
+
+        expect(success, true);
+        expect(await FlutterHce.isStateMachineInitialized(), true);
+      });
+
+      test('handles oversized content', () async {
+        final largeContent = 'A' * 3000;
+        final records = [FlutterHce.createTextRecord(largeContent)];
 
         expect(
-            () => NfcHce.addOrUpdateNdefFile(
-                fileId: 0x3F00, // Reserved ID
-                records: records),
-            throwsA(predicate((e) =>
-                e is HceException && e.code == HceErrorCode.invalidFileId)));
-      });
-
-      test('updates existing file', () async {
-        final records1 = [
-          NdefRecordData(
-              type: 'text/plain',
-              payload: Uint8List.fromList([0x48, 0x69]) // "Hi"
-              )
-        ];
-
-        final records2 = [
-          NdefRecordData(
-              type: 'text/plain',
-              payload: Uint8List.fromList([0x42, 0x79, 0x65]) // "Bye"
-              )
-        ];
-
-        await NfcHce.addOrUpdateNdefFile(fileId: 0xE104, records: records1);
-        await NfcHce.addOrUpdateNdefFile(fileId: 0xE104, records: records2);
-
-        expect(await NfcHce.hasFile(fileId: 0xE104), true);
-        expect(mockPlatform.files[0xE104], equals(records2));
-      });
-
-      test('deletes existing file', () async {
-        final records = [
-          NdefRecordData(
-              type: 'text/plain', payload: Uint8List.fromList([0x48, 0x69]))
-        ];
-
-        await NfcHce.addOrUpdateNdefFile(fileId: 0xE104, records: records);
-        await NfcHce.deleteNdefFile(fileId: 0xE104);
-
-        expect(await NfcHce.hasFile(fileId: 0xE104), false);
-      });
-
-      test('fails to delete non-existent file', () async {
-        expect(
-            () => NfcHce.deleteNdefFile(fileId: 0xE105),
-            throwsA(predicate((e) =>
-                e is HceException && e.code == HceErrorCode.fileNotFound)));
-      });
-
-      test('clears all files', () async {
-        final records = [
-          NdefRecordData(
-              type: 'text/plain', payload: Uint8List.fromList([0x48, 0x69]))
-        ];
-
-        await NfcHce.addOrUpdateNdefFile(fileId: 0xE104, records: records);
-        await NfcHce.addOrUpdateNdefFile(fileId: 0xE105, records: records);
-
-        await NfcHce.clearAllFiles();
-
-        expect(await NfcHce.hasFile(fileId: 0xE104), false);
-        expect(await NfcHce.hasFile(fileId: 0xE105), false);
-      });
-
-      test('checks NFC state', () async {
-        final state = await NfcHce.checkDeviceNfcState();
-        expect(state, NfcState.enabled);
+          () async => await FlutterHce.init(
+            records: records,
+            maxNdefFileSize: 1024, // Smaller than content
+          ),
+          throwsA(isA<FlutterHceException>()),
+        );
       });
     });
 
-    group('NDEF Record Validation', () {
-      setUp(() async {
-        final aid =
-            Uint8List.fromList([0xD2, 0x76, 0x00, 0x00, 0x85, 0x01, 0x01]);
-        await NfcHce.init(aid: aid);
+    group('NDEF Record Creation Tests', () {
+      test('creates text records correctly', () async {
+        final record1 = FlutterHce.createTextRecord('Hello World!');
+        expect(record1.type, 'T');
+        expect(record1.payload.isNotEmpty, true);
+        expect(record1.id, null);
+
+        final record2 = FlutterHce.createTextRecord('Bonjour', language: 'fr');
+        expect(record2.type, 'T');
+        expect(record2.payload.isNotEmpty, true);
+
+        // Verify language code is encoded
+        expect(record2.payload[0], 2); // Language length
+        expect(record2.payload[1], 102); // 'f'
+        expect(record2.payload[2], 114); // 'r'
       });
 
-      test('fails with empty records list', () async {
-        expect(
-            () => NfcHce.addOrUpdateNdefFile(fileId: 0xE104, records: []),
-            throwsA(predicate((e) =>
-                e is HceException &&
-                e.code == HceErrorCode.invalidNdefFormat)));
+      test('creates URI records correctly', () async {
+        final record1 = FlutterHce.createUriRecord('https://flutter.dev');
+        expect(record1.type, 'U');
+        expect(record1.payload.isNotEmpty, true);
+
+        final record2 = FlutterHce.createUriRecord('http://example.com');
+        expect(record2.type, 'U');
+        expect(record2.payload.isNotEmpty, true);
+        expect(record2.payload[0], 0); // No abbreviation
       });
 
-      test('fails with oversized payload', () async {
-        final oversizedPayload = Uint8List(70000); // Exceeds max size
+      test('creates raw records correctly', () async {
+        final customPayload = Uint8List.fromList([0x01, 0x02, 0x03, 0x04]);
+        final record = FlutterHce.createRawRecord(
+          type: 'application/custom',
+          payload: customPayload,
+        );
+
+        expect(record.type, 'application/custom');
+        expect(record.payload, customPayload);
+        expect(record.id, null);
+      });
+
+      test('creates records with custom IDs', () async {
+        final customId = Uint8List.fromList([0xAB, 0xCD]);
+        final record = FlutterHce.createRawRecord(
+          type: 'custom',
+          payload: Uint8List.fromList([0x01, 0x02]),
+          id: customId,
+        );
+
+        expect(record.id, customId);
+      });
+    });
+
+    group('NFC State Management Tests', () {
+      test('checks NFC state correctly', () async {
+        mockPlatform.setNfcState('enabled');
+        expect(await FlutterHce.checkNfcState(), 'enabled');
+
+        mockPlatform.setNfcState('disabled');
+        expect(await FlutterHce.checkNfcState(), 'disabled');
+
+        mockPlatform.setNfcState('not_supported');
+        expect(await FlutterHce.checkNfcState(), 'not_supported');
+      });
+
+      test('NFC state enum conversions work', () async {
+        expect(NfcState.fromString('enabled'), NfcState.enabled);
+        expect(NfcState.fromString('disabled'), NfcState.disabled);
+        expect(NfcState.fromString('not_supported'), NfcState.notSupported);
+        expect(NfcState.fromString('unknown'), NfcState.unknown);
+        expect(NfcState.fromString('invalid_value'), NfcState.unknown);
+      });
+    });
+
+    group('Transaction Events Tests', () {
+      test('transaction events stream is accessible', () async {
+        final stream = FlutterHce.transactionEvents;
+        expect(stream, isNotNull);
+
+        // Test stream subscription
+        bool canSubscribe = false;
+        try {
+          final subscription = stream.listen((event) {
+            expect(event, isA<HceTransactionEvent>());
+          });
+          canSubscribe = true;
+          await subscription.cancel();
+        } catch (e) {
+          canSubscribe = false;
+        }
+
+        expect(canSubscribe, true);
+      });
+    });
+
+    group('Multiple Records Management', () {
+      test('handles mixed record types', () async {
         final records = [
-          NdefRecordData(type: 'text/plain', payload: oversizedPayload)
+          FlutterHce.createTextRecord('Plain text content'),
+          FlutterHce.createUriRecord('https://example.com/path'),
+          FlutterHce.createRawRecord(
+            type: 'application/json',
+            payload: Uint8List.fromList('{"key":"value"}'.codeUnits),
+          ),
         ];
 
-        expect(
-            () => NfcHce.addOrUpdateNdefFile(
-                fileId: 0xE104, records: records, maxFileSize: 2048),
-            throwsA(predicate((e) =>
-                e is HceException && e.code == HceErrorCode.messageTooLarge)));
+        final success = await FlutterHce.init(records: records);
+        expect(success, true);
+        expect(mockPlatform.currentRecords.length, 3);
+      });
+
+      test('supports multiple text records', () async {
+        final records = TestHelper.createTextRecords([
+          'Message 1',
+          'Message 2',
+          'Message 3',
+        ]);
+
+        final success = await FlutterHce.init(records: records);
+        expect(success, true);
+        expect(mockPlatform.currentRecords.length, 3);
+      });
+
+      test('reinitializes with different records', () async {
+        // First initialization
+        final firstRecords = [FlutterHce.createTextRecord('First message')];
+        await FlutterHce.init(records: firstRecords);
+        expect(mockPlatform.currentRecords.length, 1);
+
+        // Reinitialize with different records
+        final secondRecords = [
+          FlutterHce.createTextRecord('Second message'),
+          FlutterHce.createUriRecord('https://updated.com'),
+        ];
+
+        final success = await FlutterHce.init(records: secondRecords);
+        expect(success, true);
+        expect(mockPlatform.currentRecords.length, 2);
+      });
+    });
+
+    group('Text Record Payload Format Tests', () {
+      test('text record has correct payload structure', () async {
+        final record = FlutterHce.createTextRecord('Hello', language: 'en');
+        final payload = record.payload;
+
+        // Text record format: [flags][language_length][language][text]
+        expect(payload[0], 2); // Language length
+        expect(payload[1], 101); // 'e'
+        expect(payload[2], 110); // 'n'
+        expect(payload[3], 72); // 'H' (start of "Hello")
+      });
+
+      test('different languages encoded correctly', () async {
+        final frRecord = FlutterHce.createTextRecord('Bonjour', language: 'fr');
+        final payload = frRecord.payload;
+
+        expect(payload[0], 2); // Language length
+        expect(payload[1], 102); // 'f'
+        expect(payload[2], 114); // 'r'
+      });
+    });
+
+    group('URI Record Format Tests', () {
+      test('URI record has correct payload structure', () async {
+        final record = FlutterHce.createUriRecord('http://example.com');
+        final payload = record.payload;
+
+        // URI record format: [identifier_code][uri]
+        expect(payload[0], 0); // No abbreviation
+        expect(payload[1], 104); // 'h' (start of "http://example.com")
       });
     });
   });

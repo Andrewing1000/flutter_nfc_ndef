@@ -23,7 +23,28 @@ abstract class FlutterHcePlatform extends PlatformInterface {
     _instance = instance;
   }
 
-  Future<String?> getPlatformVersion() {
-    throw UnimplementedError('platformVersion() has not been implemented.');
+  /// Initialize HCE with NDEF records
+  Future<bool> init({
+    required List<NdefRecord> records,
+    bool isWritable = false,
+    int maxNdefFileSize = 2048,
+  }) {
+    throw UnimplementedError('init() has not been implemented.');
+  }
+
+  /// Check the current NFC state
+  Future<String> checkNfcState() {
+    throw UnimplementedError('checkNfcState() has not been implemented.');
+  }
+
+  /// Check if the HCE state machine is initialized
+  Future<bool> isStateMachineInitialized() {
+    throw UnimplementedError(
+        'isStateMachineInitialized() has not been implemented.');
+  }
+
+  /// Stream of HCE transaction events
+  Stream<HceTransactionEvent> get transactionEvents {
+    throw UnimplementedError('transactionEvents has not been implemented.');
   }
 }
