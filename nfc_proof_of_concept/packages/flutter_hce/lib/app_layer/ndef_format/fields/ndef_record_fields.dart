@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:typed_data';
 import '../../field.dart';
 
-
 enum Tnf {
   empty(0x00),
   wellKnown(0x01), // WKT
@@ -41,7 +40,7 @@ class NdefFlagByte extends ApduField {
   NdefFlagByte._internal(int flagByte) : super(size: 1, name: "Flags") {
     buffer[0] = flagByte;
   }
-  
+
   factory NdefFlagByte.record({
     required Tnf tnf,
     required bool isShortRecord,
@@ -58,7 +57,7 @@ class NdefFlagByte extends ApduField {
   }
 
   factory NdefFlagByte.chunk({
-    Tnf? tnf, 
+    Tnf? tnf,
     bool isFirstChunk = false,
     bool isLastChunk = false,
     bool isFirstMessageRecord = false,
@@ -67,14 +66,15 @@ class NdefFlagByte extends ApduField {
   }) {
     int value = 0;
     if (isFirstChunk) {
-      if (tnf == null) throw ArgumentError('TNF must be provided for the first chunk.');
+      if (tnf == null)
+        throw ArgumentError('TNF must be provided for the first chunk.');
       value = _CF_MASK | tnf.value;
       if (isFirstMessageRecord) value |= _MB_MASK;
       if (hasId) value |= _IL_MASK;
     } else if (isLastChunk) {
       value = Tnf.unchanged.value;
       if (isLastMessageRecord) value |= _ME_MASK;
-    } else { 
+    } else {
       value = _CF_MASK | Tnf.unchanged.value;
     }
     return NdefFlagByte._internal(value);
@@ -82,34 +82,51 @@ class NdefFlagByte extends ApduField {
 }
 
 class NdefTypeLengthField extends ApduField {
-  static final zero = NdefTypeLengthField(0);
-  static final forWkt = NdefTypeLengthField(1);
+  static final zero = NdefTypeLengthField._internal(0);
+  static final forWkt = NdefTypeLengthField._internal(1);
 
-  NdefTypeLengthField(int length) : super(size: 1, name: "Type Length") {
-    if (length < 0 || length > 255) throw ArgumentError('Type Length is invalid.');
+  NdefTypeLengthField._internal(int length)
+      : super(size: 1, name: "Type Length") {
+    if (length < 0 || length > 255)
+      throw ArgumentError('Type Length is invalid.');
     buffer[0] = length;
+  }
+
+  factory NdefTypeLengthField(int length) {
+    // Return static instances for common values
+    switch (length) {
+      case 0:
+        return zero;
+      case 1:
+        return forWkt;
+      default:
+        return NdefTypeLengthField._internal(length);
+    }
   }
 }
 
-abstract class NdefPayloadLengthField extends ApduField {
-
-  int getValue();
-
+class NdefPayloadLengthField extends ApduField {
   factory NdefPayloadLengthField(int length) {
     if (length < 256) {
-      return _ShortNdefPayloadLengthField(length);
+      return NdefPayloadLengthField._short(length);
     } else {
-      return _LongNdefPayloadLengthField(length);
+      return NdefPayloadLengthField._long(length);
     }
   }
 
-  NdefPayloadLengthField._short(int length) : super(size: 1, name: "Payload Length (SR)") {
-    if (length < 0 || length > 255) throw ArgumentError('Payload Length for short record is invalid.');
+  NdefPayloadLengthField._short(int length)
+      : super(size: 1, name: "Payload Length (SR)") {
+    if (length < 0 || length > 255) {
+      throw ArgumentError('Payload Length for short record is invalid.');
+    }
     buffer[0] = length;
   }
 
-  NdefPayloadLengthField._long(int length) : super(size: 4, name: "Payload Length") {
-    if (length < 0 || length > 0xFFFFFFFF) throw ArgumentError('Payload Length for long record is invalid.');
+  NdefPayloadLengthField._long(int length)
+      : super(size: 4, name: "Payload Length") {
+    if (length < 0 || length > 0xFFFFFFFF) {
+      throw ArgumentError('Payload Length for long record is invalid.');
+    }
     buffer[0] = (length >> 24) & 0xFF;
     buffer[1] = (length >> 16) & 0xFF;
     buffer[2] = (length >> 8) & 0xFF;
@@ -117,71 +134,129 @@ abstract class NdefPayloadLengthField extends ApduField {
   }
 }
 
-
-class _ShortNdefPayloadLengthField extends NdefPayloadLengthField {
-  final int _length;
-  _ShortNdefPayloadLengthField(int length)
-      : _length = length,
-        super._short(length);
-  @override
-  int getValue() => _length;
-}
-
-class _LongNdefPayloadLengthField extends NdefPayloadLengthField {
-  final int _length;
-  _LongNdefPayloadLengthField(int length)
-      : _length = length,
-        super._long(length);
-  @override
-  int getValue() => _length;
-}
-
 class NdefIdLengthField extends ApduField {
-  NdefIdLengthField(int length) : super(size: 1, name: "ID Length") {
-    if (length < 0 || length > 255) throw ArgumentError('ID Length is invalid.');
+  static final zero = NdefIdLengthField._internal(0);
+  static final one = NdefIdLengthField._internal(1);
+
+  NdefIdLengthField._internal(int length) : super(size: 1, name: "ID Length") {
+    if (length < 0 || length > 255) {
+      throw ArgumentError('ID Length is invalid.');
+    }
     buffer[0] = length;
+  }
+
+  factory NdefIdLengthField(int length) {
+    // Return static instances for common values
+    switch (length) {
+      case 0:
+        return zero;
+      case 1:
+        return one;
+      default:
+        return NdefIdLengthField._internal(length);
+    }
   }
 }
 
 class NdefTypeField extends ApduData {
   final Tnf tnf;
 
-  NdefTypeField._internal(Uint8List typeBytes, {required this.tnf}) 
+  NdefTypeField._internal(Uint8List typeBytes, {required this.tnf})
       : super(typeBytes, name: "Type");
 
-  NdefTypeField(Uint8List typeBytes, {required this.tnf}) 
-      : super(typeBytes, name: "Type");
+  factory NdefTypeField(Uint8List typeBytes, {required Tnf tnf}) {
+    if (tnf == Tnf.wellKnown && typeBytes.length == 1) {
+      final typeChar = String.fromCharCode(typeBytes[0]);
+      switch (typeChar) {
+        case "T":
+          return text;
+        case "U":
+          return uri;
+        case "Sp":
+          return smartPoster;
+      }
+    } else if (tnf == Tnf.mediaType) {
+      try {
+        final mimeType = ascii.decode(typeBytes);
+        switch (mimeType) {
+          case "text/plain":
+            return textPlain;
+          case "text/json":
+            return textJson;
+        }
+      } catch (e) {
+        return NdefTypeField._internal(typeBytes, tnf: tnf);
+      }
+    } else if (tnf == Tnf.empty && typeBytes.isEmpty) {
+      return empty;
+    } else if (tnf == Tnf.unknown && typeBytes.isEmpty) {
+      return unknown;
+    } else if (tnf == Tnf.unchanged && typeBytes.isEmpty) {
+      return unchanged;
+    }
+
+    // If no match found, create new instance
+    return NdefTypeField._internal(typeBytes, tnf: tnf);
+  }
 
   factory NdefTypeField.wellKnown(String type) {
     return NdefTypeField._internal(ascii.encode(type), tnf: Tnf.wellKnown);
   }
-  
+
   factory NdefTypeField.mediaType(String mimeType) {
     return NdefTypeField._internal(ascii.encode(mimeType), tnf: Tnf.mediaType);
   }
 
   factory NdefTypeField.externalType(String externalType) {
-    return NdefTypeField._internal(ascii.encode(externalType), tnf: Tnf.externalType);
+    return NdefTypeField._internal(ascii.encode(externalType),
+        tnf: Tnf.externalType);
   }
 
   static final NdefTypeField text = NdefTypeField.wellKnown("T");
   static final NdefTypeField uri = NdefTypeField.wellKnown("U");
   static final NdefTypeField smartPoster = NdefTypeField.wellKnown("Sp");
   static final NdefTypeField textPlain = NdefTypeField.mediaType("text/plain");
+  static final NdefTypeField textJson = NdefTypeField.mediaType("text/json");
 
-  static final NdefTypeField empty = NdefTypeField._internal(Uint8List(0), tnf: Tnf.empty);
-  static final NdefTypeField unknown = NdefTypeField._internal(Uint8List(0), tnf: Tnf.unknown);
-  static final NdefTypeField unchanged = NdefTypeField._internal(Uint8List(0), tnf: Tnf.unchanged);
+  static final NdefTypeField empty =
+      NdefTypeField._internal(Uint8List(0), tnf: Tnf.empty);
+  static final NdefTypeField unknown =
+      NdefTypeField._internal(Uint8List(0), tnf: Tnf.unknown);
+  static final NdefTypeField unchanged =
+      NdefTypeField._internal(Uint8List(0), tnf: Tnf.unchanged);
 }
 
 class NdefIdField extends ApduData {
-  NdefIdField(Uint8List id) : super(id, name: "ID");
-  
+  static final empty = NdefIdField._internal(Uint8List(0));
+
+  NdefIdField._internal(Uint8List id) : super(id, name: "ID");
+
+  factory NdefIdField(Uint8List id) {
+    // Return static instance for empty ID
+    if (id.isEmpty) {
+      return empty;
+    }
+    return NdefIdField._internal(id);
+  }
+
   factory NdefIdField.fromAscii(String id) {
-    return NdefIdField(ascii.encode(id));
+    if (id.isEmpty) {
+      return empty;
+    }
+    return NdefIdField._internal(ascii.encode(id));
   }
 }
 
 class NdefPayload extends ApduData {
-  NdefPayload(Uint8List payload) : super(payload, name: "Payload");
+  static final empty = NdefPayload._internal(Uint8List(0));
+
+  NdefPayload._internal(Uint8List payload) : super(payload, name: "Payload");
+
+  factory NdefPayload(Uint8List payload) {
+    // Return static instance for empty payload
+    if (payload.isEmpty) {
+      return empty;
+    }
+    return NdefPayload._internal(payload);
+  }
 }

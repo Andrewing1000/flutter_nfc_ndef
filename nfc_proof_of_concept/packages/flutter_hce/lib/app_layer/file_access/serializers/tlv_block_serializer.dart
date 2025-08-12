@@ -20,7 +20,7 @@ class FileControlTlv extends ApduSerializer {
     tag = TlvTag.ndef;
     fileId = FileIdField.forNdef;
     maxFileSize = MaxFileSizeField(maxNdefFileSize);
-    writeAccess = WriteAccessField(isWritable: isNdefWritable);
+    writeAccess = WriteAccessField.fromByte(isNdefWritable ? 0x00 : 0xFF);
   }
 
   /// Named constructor for a Proprietary File Control TLV.
@@ -33,7 +33,8 @@ class FileControlTlv extends ApduSerializer {
     tag = TlvTag.proprietary;
     fileId = FileIdField(proprietaryFileId);
     maxFileSize = MaxFileSizeField(maxProprietaryFileSize);
-    writeAccess = WriteAccessField(isWritable: isProprietaryWritable);
+    writeAccess =
+        WriteAccessField.fromByte(isProprietaryWritable ? 0x00 : 0xFF);
   }
 
   @override

@@ -4,8 +4,25 @@ class TlvTag extends ApduField {
   static final ndef = TlvTag._internal(0x04, name: "Tag (NDEF)");
   static final proprietary = TlvTag._internal(0x05, name: "Tag (Proprietary)");
 
-  TlvTag._internal(int tag, {required String name}) : super(size: 1, name: name) {
+  TlvTag._internal(int tag, {required String name})
+      : super(size: 1, name: name) {
     buffer[0] = tag;
+  }
+
+  /// Smart constructor that tries to return existing static final instances first
+  factory TlvTag(int tag, {String? name}) {
+    // Try to match with existing static final instances
+    switch (tag) {
+      case 0x04:
+        return ndef;
+      case 0x05:
+        return proprietary;
+      default:
+        // If no match found, create new instance
+        final effectiveName = name ??
+            "Tag (0x${tag.toRadixString(16).padLeft(2, '0').toUpperCase()})";
+        return TlvTag._internal(tag, name: effectiveName);
+    }
   }
 }
 
@@ -40,18 +57,56 @@ class MaxFileSizeField extends ApduField {
 }
 
 class ReadAccessField extends ApduField {
-  static final granted = ReadAccessField._internal(0x00);
+  static final granted =
+      ReadAccessField._internal(0x00, name: "Read Access (Granted)");
 
-  ReadAccessField._internal(int access) : super(size: 1, name: "Read Access") {
+  ReadAccessField._internal(int access, {required String name})
+      : super(size: 1, name: name) {
     buffer[0] = access;
+  }
+
+  /// Smart constructor that tries to return existing static final instances first
+  factory ReadAccessField.fromByte(int accessByte, {String? name}) {
+    // Try to match with existing static final instances
+    if (accessByte == 0x00) {
+      return granted;
+    }
+
+    // If no match found, create new instance
+    final effectiveName = name ??
+        "Read Access (0x${accessByte.toRadixString(16).padLeft(2, '0').toUpperCase()})";
+    return ReadAccessField._internal(accessByte, name: effectiveName);
   }
 }
 
 class WriteAccessField extends ApduField {
-  static final granted = WriteAccessField(isWritable: true);
-  static final denied = WriteAccessField(isWritable: false);
+  static final granted =
+      WriteAccessField._internal(0x00, name: "Write Access (Granted)");
+  static final denied =
+      WriteAccessField._internal(0xFF, name: "Write Access (Denied)");
 
-  WriteAccessField({required bool isWritable}) : super(size: 1, name: "Write Access") {
-    buffer[0] = isWritable ? 0x00 : 0xFF;
+  WriteAccessField._internal(int access, {required String name})
+      : super(size: 1, name: name) {
+    buffer[0] = access;
+  }
+
+  /// Smart constructor that tries to return existing static final instances first
+  factory WriteAccessField({required bool isWritable}) {
+    return isWritable ? granted : denied;
+  }
+
+  /// Smart constructor from raw byte value
+  factory WriteAccessField.fromByte(int accessByte, {String? name}) {
+    // Try to match with existing static final instances
+    if (accessByte == 0x00) {
+      return granted;
+    } else if (accessByte == 0xFF) {
+      return denied;
+    }
+
+    // If no match found, create new instance
+    final effectiveName = name ??
+        "Write Access (0x${accessByte.toRadixString(16).padLeft(2, '0').toUpperCase()})";
+    return WriteAccessField._internal(accessByte, name: effectiveName);
   }
 }

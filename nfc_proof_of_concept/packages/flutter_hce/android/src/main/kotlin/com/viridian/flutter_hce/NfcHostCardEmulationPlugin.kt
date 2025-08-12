@@ -6,7 +6,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.nfc.NfcAdapter
-import android.nfc.Tag
 import android.util.Log
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.activity.ActivityAware
@@ -18,25 +17,20 @@ import io.flutter.plugin.common.MethodChannel.Result
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.EventChannel.EventSink
 import io.flutter.plugin.common.EventChannel.StreamHandler
-import io.flutter.plugin.common.PluginRegistry.NewIntentListener
 import com.viridian.flutter_hce.app_layer.*
 import com.viridian.flutter_hce.app_layer.ndef_format.fields.*
 import com.viridian.flutter_hce.app_layer.ndef_format.serializers.*
 
-class NfcHostCardEmulationPlugin : FlutterPlugin, MethodCallHandler, ActivityAware, StreamHandler, NewIntentListener {
+class NfcHostCardEmulationPlugin : FlutterPlugin, MethodCallHandler, ActivityAware, StreamHandler {
     
     // ===== CHANNELS Y COMUNICACIÓN =====
     private lateinit var channel: MethodChannel
     private lateinit var eventChannel: EventChannel
-    private lateinit var intentEventChannel: EventChannel
     private var eventSink: EventSink? = null
-    private var intentEventSink: EventSink? = null
     
     private var activity: Activity? = null
     private var nfcAdapter: NfcAdapter? = null
     private var stateMachine: HceStateMachine? = null
-    
-    private var cachedNfcIntent: Intent? = null
 
     
     private val hceBroadcastReceiver = object : BroadcastReceiver() {
@@ -85,20 +79,7 @@ class NfcHostCardEmulationPlugin : FlutterPlugin, MethodCallHandler, ActivityAwa
         eventChannel = EventChannel(flutterPluginBinding.binaryMessenger, "nfc_host_card_emulation_events")
         eventChannel.setStreamHandler(this)
         
-        intentEventChannel = EventChannel(flutterPluginBinding.binaryMessenger, "nfc_intent_events")
-        intentEventChannel.setStreamHandler(object : StreamHandler {
-            override fun onListen(arguments: Any?, events: EventSink?) {
-                intentEventSink = events
-                Log.d(TAG, "Intent EventChannel listener attached")
-            }
-            
-            override fun onCancel(arguments: Any?) {
-                intentEventSink = null
-                Log.d(TAG, "Intent EventChannel listener cancelled")
-            }
-        })
-        
-        Log.d(TAG, "Channels configured: MethodChannel and 2 EventChannels ready")
+        Log.d(TAG, "Channels configured: MethodChannel and EventChannel ready")
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
@@ -115,16 +96,11 @@ class NfcHostCardEmulationPlugin : FlutterPlugin, MethodCallHandler, ActivityAwa
         activity = binding.activity
         nfcAdapter = NfcAdapter.getDefaultAdapter(activity)
         
-
-        binding.addOnNewIntentListener(this)
-        
         val intentFilter = IntentFilter().apply {
             addAction("io.flutter.plugins.nfc_host_card_emulation.TRANSACTION")
             addAction("io.flutter.plugins.nfc_host_card_emulation.DEACTIVATED")
         }
         activity?.registerReceiver(hceBroadcastReceiver, intentFilter)
-        
-        handleNfcIntent(activity?.intent)
         
         Log.d(TAG, "Activity setup complete - NFC: ${nfcAdapter?.isEnabled}")
     }
@@ -150,93 +126,7 @@ class NfcHostCardEmulationPlugin : FlutterPlugin, MethodCallHandler, ActivityAwa
         onDetachedFromActivity() 
     }
 
-    // ===== NFC INTENT LAUNCHING =====
-
-    override fun onNewIntent(intent: Intent): Boolean {
-        Log.d(TAG, "onNewIntent: ${intent.action}")
-        return handleNfcIntent(intent)
-    }
-
-    private fun handleNfcIntent(intent: Intent?): Boolean {
-        if (intent == null) return false
-        
-        Log.d(TAG, "Handling intent: ${intent.action}")
-        
-        when (intent.action) {
-            NfcAdapter.ACTION_TECH_DISCOVERED -> {
-                Log.d(TAG, "NFC intent detected - app launched/resumed via HCE")
-                
-                val nfcData = extractNfcData(intent)
-                
-                cachedNfcIntent = intent
-                
-                val eventData = mapOf(
-                    "type" to "nfc_intent",
-                    "action" to intent.action,
-                    "data" to nfcData
-                )
-                
-                intentEventSink?.success(eventData)
-                
-                return true
-            }
-        }
-
-        if (intent.getBooleanExtra("launched_via_hce", false)) {
-            Log.d(TAG, "HCE auto-launch intent detected (non-NFC action): ${intent.action}")
-            val data = extractNfcData(intent)
-
-            cachedNfcIntent = intent
-
-            val eventData = mapOf(
-                "type" to "hce_launch",
-                "action" to (intent.action ?: ""),
-                "data" to data
-            )
-
-            intentEventSink?.success(eventData)
-
-            return true
-        }
-        return false
-    }
-
-    private fun extractNfcData(intent: Intent): Map<String, Any> {
-        val data = mutableMapOf<String, Any>()
-        
-        // Obtener tag NFC
-        val tag = intent.getParcelableExtra<Tag>(NfcAdapter.EXTRA_TAG)
-        if (tag != null) {
-            data["tagId"] = tag.id.toList()
-            data["techList"] = tag.techList.toList()
-            
-            Log.d(TAG, "NFC Tag ID: ${tag.id.joinToString { "%02X".format(it) }}")
-            Log.d(TAG, "Tech List: ${tag.techList.joinToString()}")
-        }
-        
-        // Obtener extras del intent
-        val extras = mutableMapOf<String, Any>()
-        intent.extras?.let { bundle ->
-            bundle.keySet().forEach { key ->
-                bundle.get(key)?.let { value ->
-                    when (value) {
-                        is String -> extras[key] = value
-                        is ByteArray -> extras[key] = value.toList()
-                        is Int -> extras[key] = value
-                        is Boolean -> extras[key] = value
-                        else -> extras[key] = value.toString()
-                    }
-                }
-            }
-        }
-        if (intent.hasExtra("launched_via_hce")) {
-            extras["launched_via_hce"] = intent.getBooleanExtra("launched_via_hce", false)
-            extras["hce_event"] = intent.getStringExtra("hce_event") ?: ""
-        }
-        data["extras"] = extras
-        
-        return data
-    }
+    // ===== EVENTCHANNEL STREAMHANDLER =====
 
     override fun onListen(arguments: Any?, events: EventSink?) {
         Log.d(TAG, "EventChannel listener attached")
@@ -258,7 +148,6 @@ class NfcHostCardEmulationPlugin : FlutterPlugin, MethodCallHandler, ActivityAwa
                 "init" -> initializeHce(call, result)
                 "checkNfcState" -> checkNfcState(result)
                 "getStateMachine" -> getStateMachineStatus(result)
-                "getNfcIntent" -> getNfcIntentData(result)
                 else -> {
                     Log.w(TAG, "Unknown method: ${call.method}")
                     result.notImplemented()
@@ -307,7 +196,7 @@ class NfcHostCardEmulationPlugin : FlutterPlugin, MethodCallHandler, ActivityAwa
     stateMachine = HceStateMachine(aid, ndefMessage, isWritable, maxNdefFileSize)
     HceManager.stateMachine = stateMachine
         
-        Log.d(TAG, "✅ HCE initialized successfully")
+        Log.d(TAG, "HCE initialized successfully")
         result.success(true)
     }
 
@@ -327,24 +216,6 @@ class NfcHostCardEmulationPlugin : FlutterPlugin, MethodCallHandler, ActivityAwa
             result.error("NOT_INITIALIZED", "State Machine no inicializado. Llama init() primero.", null)
         } else {
             result.success("State machine initialized")
-        }
-    }
-
-    private fun getNfcIntentData(result: Result) {
-        if (cachedNfcIntent != null) {
-            val nfcData = extractNfcData(cachedNfcIntent!!)
-            val intentData = mapOf(
-                "action" to cachedNfcIntent!!.action,
-                "data" to nfcData
-            )
-            
-            Log.d(TAG, "Returning cached NFC intent data")
-            result.success(intentData)
-            
-            cachedNfcIntent = null
-        } else {
-            Log.d(TAG, "No cached NFC intent data")
-            result.success(null)
         }
     }
 

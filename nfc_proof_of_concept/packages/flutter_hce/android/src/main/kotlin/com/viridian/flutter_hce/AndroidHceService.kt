@@ -4,7 +4,6 @@ import android.content.Intent
 import android.nfc.cardemulation.HostApduService
 import android.os.Bundle
 import android.util.Log
-import android.content.pm.PackageManager
 
 class AndroidHceService : HostApduService() {
 
@@ -22,37 +21,11 @@ class AndroidHceService : HostApduService() {
 
         val stateMachine = HceManager.stateMachine
 
-        // Si aún no hay FSM, intentar auto-lanzar la app antes de responder
+        // Si aún no hay FSM, retornar error
         if (stateMachine == null) {
             Log.e("HCE_SERVICE", "HCE State Machine is not initialized. Flutter has not called init().")
-            try {
-                val pm: PackageManager = applicationContext.packageManager
-                val launchIntent = pm.getLaunchIntentForPackage(applicationContext.packageName)
-                if (launchIntent != null) {
-                    launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                    launchIntent.putExtra("launched_via_hce", true)
-                    launchIntent.putExtra("hce_event", "apdu_received")
-                    applicationContext.startActivity(launchIntent)
-                }
-            } catch (e: Exception) {
-                Log.w("HCE_SERVICE", "Auto-launch failed: ${e.message}")
-            }
             return conditionsNotSatisfiedResponse
         }
-
-        try {
-            val pm: PackageManager = applicationContext.packageManager
-            val launchIntent = pm.getLaunchIntentForPackage(applicationContext.packageName)
-            if (launchIntent != null) {
-                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                launchIntent.putExtra("launched_via_hce", true)
-                launchIntent.putExtra("hce_event", "apdu_received")
-                applicationContext.startActivity(launchIntent)
-            }
-        } catch (e: Exception) {
-            Log.w("HCE_SERVICE", "Auto-launch failed: ${e.message}")
-        }
-
 
         val responseApdu: ByteArray = stateMachine.processCommand(commandApdu)
 
@@ -62,7 +35,6 @@ class AndroidHceService : HostApduService() {
             intent.action = "io.flutter.plugins.nfc_host_card_emulation.TRANSACTION"
             intent.putExtra("command", commandApdu)
             intent.putExtra("response", responseApdu)
-            intent.putExtra("launched_via_hce", true)
             sendBroadcast(intent)
         }
 
@@ -76,7 +48,6 @@ class AndroidHceService : HostApduService() {
         Intent().also { intent ->
             intent.action = "io.flutter.plugins.nfc_host_card_emulation.DEACTIVATED"
             intent.putExtra("reason", reason)
-            intent.putExtra("launched_via_hce", true)
             sendBroadcast(intent)
         }
     }

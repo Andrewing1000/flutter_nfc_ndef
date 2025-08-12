@@ -13,10 +13,27 @@ class CcLenField extends ApduField {
 }
 
 class CcMappingVersionField extends ApduField {
-  static final v2_0 = CcMappingVersionField._internal(0x20);
+  static final v2_0 =
+      CcMappingVersionField._internal(0x20, name: "MappingVersion (2.0)");
 
-  CcMappingVersionField._internal(int version) : super(size: 1, name: "MappingVersion") {
+  CcMappingVersionField._internal(int version, {required String name})
+      : super(size: 1, name: name) {
     buffer[0] = version;
+  }
+
+  /// Smart constructor that tries to return existing static final instances first
+  factory CcMappingVersionField.fromByte(int version, {String? name}) {
+    // Try to match with existing static final instances
+    if (version == 0x20) {
+      return v2_0;
+    }
+
+    // If no match found, create new instance
+    final majorVersion = (version >> 4) & 0x0F;
+    final minorVersion = version & 0x0F;
+    final effectiveName =
+        name ?? "MappingVersion ($majorVersion.$minorVersion)";
+    return CcMappingVersionField._internal(version, name: effectiveName);
   }
 }
 

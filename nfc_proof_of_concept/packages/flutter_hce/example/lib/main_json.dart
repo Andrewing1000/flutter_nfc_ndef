@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'hce_widgets.dart';
+import 'json_hce_widget.dart';
 
 void main() {
   runApp(JsonHceApp());
