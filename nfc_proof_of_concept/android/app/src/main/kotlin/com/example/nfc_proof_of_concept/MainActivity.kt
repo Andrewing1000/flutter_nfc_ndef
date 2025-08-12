@@ -29,7 +29,7 @@ class MainActivity: FlutterActivity() {
 
     private fun getAidFromXml(): String? {
         try {
-            val parser: XmlResourceParser = resources.getXml(R.xml.aid_list)
+            val parser: XmlResourceParser = resources.getXml(R.xml.hce_aid_list)
             
             var eventType = parser.eventType
             while (eventType != XmlPullParser.END_DOCUMENT) {

@@ -3,103 +3,90 @@ import 'dart:typed_data';
 import '../file_access/serializers/apdu_command_serializer.dart';
 
 /// High-level wrapper for APDU command creation and parsing
-/// Simplifies common NFC operations
+/// Uses intelligent constructors instead of manual byte manipulation
 class ApduCommandParser {
   final ApduCommand _command;
 
   ApduCommandParser._(this._command);
 
-  /// Creates a parser from raw command bytes
+  /// Creates a parser from raw command bytes (deserialization only)
   factory ApduCommandParser.fromBytes(Uint8List rawCommand) {
     final command = ApduCommand.fromBytes(rawCommand);
     return ApduCommandParser._(command);
   }
 
-  /// Creates a SELECT command for NDEF application
-  factory ApduCommandParser.selectNdefApplication() {
-    // Standard NDEF Application ID: D2760000850101
-    final ndefAppId = [0xD2, 0x76, 0x00, 0x00, 0x85, 0x01, 0x01];
-    return ApduCommandParser._buildSelect(ndefAppId);
-  }
+  /// Intelligent constructor - minimal arguments, deduces context
+  ApduCommandParser({
+    required List<int> fileId,
+    bool byName = false,
+  }) : this._(SelectCommand(fileId: fileId, byName: byName));
 
-  /// Creates a SELECT command for Capability Container
-  factory ApduCommandParser.selectCapabilityContainer() {
-    // Standard CC file ID: E103
-    final ccFileId = [0xE1, 0x03];
-    return ApduCommandParser._buildSelect(ccFileId);
-  }
+  // Named constructors for SELECT commands
 
-  /// Creates a SELECT command for NDEF file
-  factory ApduCommandParser.selectNdefFile() {
-    // Standard NDEF file ID: E104
-    final ndefFileId = [0xE1, 0x04];
-    return ApduCommandParser._buildSelect(ndefFileId);
-  }
+  /// SELECT by Application Name (AID) - requires explicit AID
+  ApduCommandParser.selectByName({
+    required List<int> applicationId,
+  }) : this._(SelectCommand.byName(applicationId: applicationId));
 
-  /// Creates a generic SELECT command
-  factory ApduCommandParser.select(List<int> fileId) {
-    return ApduCommandParser._buildSelect(fileId);
-  }
+  /// SELECT by File ID
+  ApduCommandParser.selectByFileId({
+    required List<int> fileId,
+  }) : this._(SelectCommand.byFileId(fileId: fileId));
 
-  /// Creates a READ BINARY command
-  factory ApduCommandParser.readBinary({int offset = 0, int length = 255}) {
-    if (offset > 0x7FFF) throw ArgumentError('Offset too large');
-    if (length > 255) throw ArgumentError('Length must be ≤ 255');
+  /// SELECT Capability Container file
+  ApduCommandParser.selectCapabilityContainer()
+      : this._(SelectCommand.capabilityContainer());
 
-    final p1 = (offset >> 8) & 0xFF;
-    final p2 = offset & 0xFF;
+  /// SELECT NDEF Data file
+  ApduCommandParser.selectNdefFile() : this._(SelectCommand.ndefFile());
 
-    // CLA | INS | P1 | P2 | Le
-    final commandBytes = Uint8List.fromList([
-      0x00, // CLA (standard)
-      0xB0, // INS (READ BINARY)
-      p1, // P1 (offset high byte)
-      p2, // P2 (offset low byte)
-      length, // Le (length to read)
-    ]);
+  /// READ BINARY command with intelligent defaults
+  ApduCommandParser.readBinary({
+    int offset = 0,
+    int length = 255,
+  }) : this._(ReadBinaryCommand(offset: offset, length: length));
 
-    final command = ApduCommand.fromBytes(commandBytes);
-    return ApduCommandParser._(command);
-  }
+  /// Read from beginning of file
+  ApduCommandParser.readFromStart({
+    int length = 255,
+  }) : this._(ReadBinaryCommand.fromStart(length: length));
 
-  /// Creates an UPDATE BINARY command
-  factory ApduCommandParser.updateBinary(List<int> data, {int offset = 0}) {
-    if (offset > 0x7FFF) throw ArgumentError('Offset too large');
-    if (data.length > 255)
-      throw ArgumentError('Data too large for single UPDATE');
+  /// Read NDEF length field (first 2 bytes)
+  ApduCommandParser.readNdefLength() : this._(ReadBinaryCommand.ndefLength());
 
-    final p1 = (offset >> 8) & 0xFF;
-    final p2 = offset & 0xFF;
+  /// Read Capability Container (typical 15 bytes)
+  ApduCommandParser.readCapabilityContainer()
+      : this._(ReadBinaryCommand.capabilityContainer());
 
-    // CLA | INS | P1 | P2 | Lc | Data
-    final commandBytes = <int>[
-      0x00, // CLA (standard)
-      0xD6, // INS (UPDATE BINARY)
-      p1, // P1 (offset high byte)
-      p2, // P2 (offset low byte)
-      data.length, // Lc (data length)
-    ];
-    commandBytes.addAll(data);
+  /// Read in chunks for large files
+  ApduCommandParser.readChunk({
+    required int offset,
+    int chunkSize = 240,
+  }) : this._(ReadBinaryCommand.chunk(offset: offset, chunkSize: chunkSize));
 
-    final command = ApduCommand.fromBytes(Uint8List.fromList(commandBytes));
-    return ApduCommandParser._(command);
-  }
+  // Named constructors for UPDATE BINARY commands
 
-  // Internal helper for building SELECT commands
-  static ApduCommandParser _buildSelect(List<int> fileId) {
-    // CLA | INS | P1 | P2 | Lc | Data
-    final commandBytes = <int>[
-      0x00, // CLA (standard)
-      0xA4, // INS (SELECT)
-      0x00, // P1 (select by file ID)
-      0x0C, // P2 (return FCI template)
-      fileId.length, // Lc (file ID length)
-    ];
-    commandBytes.addAll(fileId);
+  /// UPDATE BINARY command with intelligent defaults
+  ApduCommandParser.updateBinary({
+    required List<int> data,
+    int offset = 0,
+  }) : this._(UpdateBinaryCommand(data: data, offset: offset));
 
-    final command = ApduCommand.fromBytes(Uint8List.fromList(commandBytes));
-    return ApduCommandParser._(command);
-  }
+  /// Update from beginning of file
+  ApduCommandParser.updateFromStart({
+    required List<int> data,
+  }) : this._(UpdateBinaryCommand.fromStart(data: data));
+
+  /// Update NDEF data (includes length field)
+  ApduCommandParser.updateNdefData({
+    required List<int> ndefRecords,
+  }) : this._(UpdateBinaryCommand.ndefData(ndefRecords: ndefRecords));
+
+  /// Update in chunks for large data
+  ApduCommandParser.updateChunk({
+    required List<int> data,
+    required int offset,
+  }) : this._(UpdateBinaryCommand.chunk(data: data, offset: offset));
 
   // Convenient getters
 
