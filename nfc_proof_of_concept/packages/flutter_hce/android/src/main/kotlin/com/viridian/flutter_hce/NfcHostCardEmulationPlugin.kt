@@ -163,8 +163,7 @@ class NfcHostCardEmulationPlugin : FlutterPlugin, MethodCallHandler, ActivityAwa
         Log.d(TAG, "Handling intent: ${intent.action}")
         
         when (intent.action) {
-            NfcAdapter.ACTION_TECH_DISCOVERED,
-            NfcAdapter.ACTION_NDEF_DISCOVERED -> {
+            NfcAdapter.ACTION_TECH_DISCOVERED -> {
                 Log.d(TAG, "NFC intent detected - app launched/resumed via HCE")
                 
                 val nfcData = extractNfcData(intent)
