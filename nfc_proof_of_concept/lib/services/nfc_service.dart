@@ -4,7 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:nfc_manager/nfc_manager.dart';
 
-// Import HCE components - CORRECTED IMPORTS
+// Import HCE components
 import 'package:flutter_hce/hce_manager.dart';
 import 'package:flutter_hce/hce_types.dart';
 import 'package:flutter_hce/hce_utils.dart';
@@ -44,15 +44,16 @@ class NfcService extends ChangeNotifier {
   }) async {
     if (_isChecking) return _isReady;
 
-    _setChecking(true);
-    _clearError();
+    _setCheckingQuietly(true);
+    _clearErrorQuietly();
 
     try {
       // Check basic NFC availability
       final isNfcAvailable = await NfcManager.instance.isAvailable();
       if (!isNfcAvailable) {
-        _setError('NFC no está disponible en este dispositivo');
-        _setReady(false);
+        _setErrorQuietly('NFC no está disponible en este dispositivo');
+        _setReadyQuietly(false);
+        notifyListeners(); // Notificar error
         return false;
       }
 
@@ -62,16 +63,18 @@ class NfcService extends ChangeNotifier {
       } else if (mode == NfcBarMode.readOnly) {
         return await _initializeReadMode();
       } else {
-        _setError('Modo o AID no especificados correctamente');
-        _setReady(false);
+        _setErrorQuietly('Modo o AID no especificados correctamente');
+        _setReadyQuietly(false);
+        notifyListeners(); // Notificar error
         return false;
       }
     } catch (e) {
-      _setError('Error al inicializar NFC: $e');
-      _setReady(false);
+      _setErrorQuietly('Error al inicializar NFC: $e');
+      _setReadyQuietly(false);
+      notifyListeners(); // Notificar error
       return false;
     } finally {
-      _setChecking(false);
+      _setCheckingQuietly(false);
     }
   }
 
@@ -85,9 +88,14 @@ class NfcService extends ChangeNotifier {
       debugPrint('NFC State: ${nfcState.description}');
 
       if (nfcState != NfcState.enabled) {
-        _setError('NFC no está habilitado en este dispositivo');
+        _setErrorQuietly('NFC no está habilitado en este dispositivo');
         return false;
       }
+
+      // BROADCAST MODE: Solo notificar cuando HCE NFC state esté disponible
+      _setCurrentModeQuietly(NfcBarMode.broadcastOnly);
+      _setReadyQuietly(true);
+      notifyListeners(); // Notificar porque HCE NFC state está disponible
 
       List<NdefRecordSerializer> records = [];
 
@@ -125,17 +133,19 @@ class NfcService extends ChangeNotifier {
       );
 
       if (success) {
-        _currentMode = NfcBarMode.broadcastOnly;
-        _setReady(true);
         debugPrint(
             'HCE initialized successfully with AID: ${AidUtils.formatAid(Uint8List.fromList(aid))}');
         return true;
       } else {
-        _setError('No se pudo inicializar HCE');
+        _setErrorQuietly('No se pudo inicializar HCE');
+        _setReadyQuietly(false);
+        notifyListeners();
         return false;
       }
     } catch (e) {
-      _setError('Error en modo HCE: $e');
+      _setErrorQuietly('Error en modo HCE: $e');
+      _setReadyQuietly(false);
+      notifyListeners();
       debugPrint('HCE Error: $e');
       return false;
     }
@@ -145,42 +155,55 @@ class NfcService extends ChangeNotifier {
     try {
       await _stopAll();
 
+      // READ ONLY MODE: Notificar cuando NFC esté disponible
+      _setCurrentModeQuietly(NfcBarMode.readOnly);
+      _setReadyQuietly(true);
+      notifyListeners(); // Notificar porque NFC está disponible
+
       NfcManager.instance.startSession(
         onDiscovered: (NfcTag tag) async {
-          _setTransactionActive(true);
+          _setTransactionActiveQuietly(true);
+          notifyListeners(); // Notificar actividad de transacción
 
           try {
             final ndefData = await _ndefReader.readNdefFromTag(tag);
             if (ndefData != null) {
               debugPrint('NDEF Data read successfully: $ndefData');
+              // READ ONLY MODE: Notificar cuando se ha leído exitosamente NDEF file
+              notifyListeners(); // Notificar lectura exitosa
             } else {
               debugPrint('No NDEF data found or read failed');
             }
           } catch (e) {
             debugPrint('Error reading NDEF data: $e');
-            _setError('Error leyendo datos NDEF: $e');
+            _setErrorQuietly('Error leyendo datos NDEF: $e');
+            // No notificar aquí, solo en casos exitosos
           } finally {
             Timer(const Duration(milliseconds: 1500), () {
-              _setTransactionActive(false);
+              _setTransactionActiveQuietly(false);
+              notifyListeners(); // Notificar fin de transacción
             });
           }
         },
       );
 
       _nfcSessionActive = true;
-      _currentMode = NfcBarMode.readOnly;
-      _setReady(true);
       return true;
     } catch (e) {
-      _setError('Error en modo lectura: $e');
+      _setErrorQuietly('Error en modo lectura: $e');
+      _setReadyQuietly(false);
+      notifyListeners();
       return false;
     }
   }
 
   Future<void> _stopAll() async {
+    bool stateChanged = false;
+
     if (_nfcSessionActive) {
       NfcManager.instance.stopSession();
       _nfcSessionActive = false;
+      stateChanged = true;
     }
 
     // Stop HCE session if active
@@ -192,6 +215,13 @@ class NfcService extends ChangeNotifier {
         debugPrint('Warning stopping HCE: $e');
       }
       _hceManager = null;
+      stateChanged = true;
+    }
+
+    if (stateChanged) {
+      _setCurrentModeQuietly(null);
+      _setReadyQuietly(false);
+      // No notificar aquí, esto es solo limpieza interna
     }
   }
 
@@ -202,11 +232,19 @@ class NfcService extends ChangeNotifier {
     }
   }
 
+  void _setReadyQuietly(bool ready) {
+    _isReady = ready;
+  }
+
   void _setChecking(bool checking) {
     if (_isChecking != checking) {
       _isChecking = checking;
       notifyListeners();
     }
+  }
+
+  void _setCheckingQuietly(bool checking) {
+    _isChecking = checking;
   }
 
   void _setTransactionActive(bool active) {
@@ -216,6 +254,21 @@ class NfcService extends ChangeNotifier {
     }
   }
 
+  void _setTransactionActiveQuietly(bool active) {
+    _isTransactionActive = active;
+  }
+
+  void _setCurrentMode(NfcBarMode? mode) {
+    if (_currentMode != mode) {
+      _currentMode = mode;
+      notifyListeners();
+    }
+  }
+
+  void _setCurrentModeQuietly(NfcBarMode? mode) {
+    _currentMode = mode;
+  }
+
   void _setError(String? error) {
     if (_lastError != error) {
       _lastError = error;
@@ -223,39 +276,53 @@ class NfcService extends ChangeNotifier {
     }
   }
 
+  void _setErrorQuietly(String? error) {
+    _lastError = error;
+  }
+
   void _clearError() {
     _setError(null);
   }
 
+  void _clearErrorQuietly() {
+    _setErrorQuietly(null);
+  }
+
   void reset() {
     _stopAll();
-    _isReady = false;
-    _isChecking = false;
-    _isTransactionActive = false;
-    _currentMode = null;
-    _lastError = null;
-    notifyListeners();
+    _setReadyQuietly(false);
+    _setCheckingQuietly(false);
+    _setTransactionActiveQuietly(false);
+    _setCurrentModeQuietly(null);
+    _clearErrorQuietly();
+    notifyListeners(); // Solo notificar el reset completo
   }
 
   void _onHceTransaction(ApduCommand command, ApduResponse response) {
     debugPrint(
         'HCE Transaction: ${command.toString()} -> ${response.toString()}');
-    _setTransactionActive(true);
+
+    // BROADCAST MODE: Notificar cuando un lector ha leído exitosamente el NDEF file
+    _setTransactionActiveQuietly(true);
+    notifyListeners(); // Notificar lectura exitosa por parte del lector
 
     Future.delayed(const Duration(seconds: 2), () {
-      _setTransactionActive(false);
+      _setTransactionActiveQuietly(false);
+      notifyListeners(); // Notificar fin de transacción
     });
   }
 
   void _onHceDeactivation(HceDeactivationReason reason) {
     debugPrint('HCE Deactivated: ${reason.description}');
-    _setTransactionActive(false);
+    _setTransactionActiveQuietly(false);
+    // No notificar aquí, es solo desactivación
   }
 
   void _onHceError(HceException error) {
     debugPrint('HCE Error: ${error.toString()}');
-    _setError('Error HCE: ${error.message}');
-    _setTransactionActive(false);
+    _setErrorQuietly('Error HCE: ${error.message}');
+    _setTransactionActiveQuietly(false);
+    // No notificar en errores
   }
 
   @override
