@@ -29,6 +29,9 @@ class NfcActiveBar extends StatefulWidget {
 
 class _NfcActiveBarState extends State<NfcActiveBar>
     with TickerProviderStateMixin {
+  bool loading =
+      true; // Inicializar como true para mostrar carga desde el inicio
+  bool _isCheckingNfc = false; // Variable separada para controlar la ejecución
   late final NfcService _nfcService;
   late final NfcPulseManager _pulseManager;
 
@@ -85,28 +88,65 @@ class _NfcActiveBarState extends State<NfcActiveBar>
   }
 
   Future<void> _checkNfc() async {
-    final wasReady = await _nfcService.checkNfcState(
-      broadcastData: widget.broadcastData,
-      mode: widget.mode,
-      aid: widget.aid,
-    );
+    if (_isCheckingNfc) return;
 
-    if (!mounted) return;
+    _isCheckingNfc = true;
 
-    if (wasReady) {
-      _pulseManager.startHeartbeat(true);
-    } else {
-      _pulseManager.stopHeartbeat();
+    _nfcService.removeListener(_onNfcServiceUpdate);
+
+    if (mounted && !loading) {
+      setState(() {
+        loading = true;
+      });
+    }
+
+    try {
+      final results = await Future.wait([
+        Future.delayed(const Duration(milliseconds: 1500)),
+        _nfcService.checkNfcState(
+          broadcastData: widget.broadcastData,
+          mode: widget.mode,
+          aid: widget.aid,
+        ),
+      ]);
+
+      final wasReady = results[1] as bool;
+
+      if (mounted) {
+        setState(() {
+          loading = false;
+        });
+
+        if (wasReady) {
+          _pulseManager.startHeartbeat(true);
+        } else {
+          _pulseManager.stopHeartbeat();
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          loading = false;
+        });
+      }
+      print('Error en _checkNfc: $e');
+    } finally {
+      _isCheckingNfc = false;
+      if (mounted) {
+        _nfcService.addListener(_onNfcServiceUpdate);
+      }
     }
   }
 
   void _onTapDown(TapDownDetails details) {
-    if (_nfcService.isReady) {
-      final box = context.findRenderObject() as RenderBox?;
-      if (box?.hasSize == true) {
-        _pulseManager.addManualPulse(details.localPosition, box!.size);
-      }
+    final box = context.findRenderObject() as RenderBox?;
+    if (box?.hasSize == true) {
+      _pulseManager.addManualPulse(details.localPosition, box!.size);
     }
+  }
+
+  void _onTap() {
+    _checkNfc();
   }
 
   @override
@@ -114,7 +154,6 @@ class _NfcActiveBarState extends State<NfcActiveBar>
     final bool isActiveUi = _nfcService.isReady;
     final bool hasError = _nfcService.lastError != null;
 
-    // Enhanced UI based on transaction state
     final bgColor = isActiveUi
         ? (_nfcService.isTransactionActive
             ? const Color.fromARGB(255, 40, 40, 40)
@@ -131,7 +170,7 @@ class _NfcActiveBarState extends State<NfcActiveBar>
     final decoration = BoxDecoration(
       color: bgColor,
       borderRadius: BorderRadius.circular(3),
-      border: hasError
+      border: hasError & !loading
           ? Border.all(color: Colors.red.withOpacity(0.5), width: 1)
           : null,
     );
@@ -141,7 +180,7 @@ class _NfcActiveBarState extends State<NfcActiveBar>
       borderRadius: BorderRadius.circular(6),
       child: GestureDetector(
         onTapDown: _onTapDown,
-        onTap: _checkNfc,
+        onTap: _onTap,
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: _boxWidth),
           child: SizedBox(
@@ -164,7 +203,7 @@ class _NfcActiveBarState extends State<NfcActiveBar>
                       ),
                     ),
                   Center(
-                    child: _nfcService.isChecking
+                    child: loading
                         ? SizedBox(
                             width: 18,
                             height: 18,
@@ -203,14 +242,16 @@ class _NfcActiveBarState extends State<NfcActiveBar>
 
   String _getStatusText() {
     if (_nfcService.lastError != null) {
+      print("*******************************************");
+      print(_nfcService.lastError);
       return 'Error NFC';
     } else if (_nfcService.isReady) {
       if (_nfcService.isTransactionActive) {
         return 'Transacción...';
       } else {
         final mode = _nfcService.currentMode == NfcBarMode.broadcastOnly
-            ? 'HCE'
-            : 'Lectura';
+            ? 'Activo' // - HCE'
+            : 'Activo'; //  - Lectura';
         return 'NFC $mode';
       }
     } else {

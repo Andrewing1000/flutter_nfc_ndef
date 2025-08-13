@@ -1,6 +1,9 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:nfc_proof_of_concept/nfc_active_bar.dart';
 import 'package:nfc_proof_of_concept/qr_container.dart';
+import 'package:nfc_proof_of_concept/nfc_aid_helper.dart';
 import './main.dart';
 
 class RecievePaymentPage extends StatefulWidget {
@@ -13,29 +16,47 @@ class RecievePaymentPage extends StatefulWidget {
 }
 
 class RecievePaymentPageState extends State<RecievePaymentPage> {
-  late TextEditingController control;
+  Uint8List? aid;
+  bool isLoadingAid = true;
+
   @override
   void initState() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Check if the widget is still in the tree before calling.
+    super.initState();
+    _loadAid();
+  }
+
+  Future<void> _loadAid() async {
+    try {
+      final retrievedAid = await NfcAidHelper.getAidFromXml();
+      setState(() {
+        aid = retrievedAid;
+        isLoadingAid = false;
+      });
+
       if (mounted) {
         appLayoutKey.currentState?.showNotification(
             text: "QR creado exitosamente", icon: Icons.check);
       }
-    });
-    super.initState();
-    control = TextEditingController(text: '0.0');
+    } catch (e) {
+      setState(() {
+        isLoadingAid = false;
+      });
+
+      if (mounted) {
+        appLayoutKey.currentState
+            ?.showNotification(text: "Error al cargar AID", icon: Icons.error);
+      }
+    }
   }
 
   @override
   void dispose() {
-    control.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 24.0),
         child: Column(
@@ -44,10 +65,32 @@ class RecievePaymentPageState extends State<RecievePaymentPage> {
             const Spacer(flex: 1),
             const QRContainer(data: 'fadsfsdkanfkjasdnfsdafsdkjfnnasdkjfnasd'),
             const Spacer(flex: 1),
-            const NfcActiveBar(
-              broadcastData: 'fadsfsdkanfkjasdnfsdafsdkjfnnasdkjfnasd',
-              mode: NfcBarMode.broadcastOnly,
-            ),
+            if (isLoadingAid)
+              const Center(
+                child: Column(
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Cargando configuración NFC...'),
+                  ],
+                ),
+              )
+            else if (aid != null)
+              NfcActiveBar(
+                broadcastData: 'fadsfsdkanfkjasdnfsdafsdkjfnnasdkjfnasd',
+                mode: NfcBarMode.broadcastOnly,
+                aid: aid!,
+              )
+            else
+              const Center(
+                child: Column(
+                  children: [
+                    Icon(Icons.error, color: Colors.red),
+                    SizedBox(height: 8),
+                    Text('Error al cargar configuración NFC'),
+                  ],
+                ),
+              ),
             const Spacer(flex: 1),
           ],
         ),

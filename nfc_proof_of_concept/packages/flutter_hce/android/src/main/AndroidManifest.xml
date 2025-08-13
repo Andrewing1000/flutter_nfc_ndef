@@ -6,6 +6,7 @@
         android:required="true" />
     
     <application>
+        <!-- Servicio deshabilitado - se usa el del proyecto principal
         <service
             android:name="com.viridian.flutter_hce.AndroidHceService"
             android:exported="true"
@@ -17,7 +18,8 @@
             
             <meta-data
                 android:name="android.nfc.cardemulation.host_apdu_service"
-                android:resource="@xml/hce_aid_list" />
+                android:resource="@xml/apduservice" />
         </service>
+        -->
     </application>
 </manifest>

@@ -2,8 +2,8 @@
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
-import 'package:nfc_manager/nfc_manager.dart';
 import 'package:nfc_proof_of_concept/nfc_active_bar.dart';
+import 'package:nfc_proof_of_concept/services/nfc_service.dart';
 import './main.dart';
 
 class ScanQrPage extends StatefulWidget {
@@ -16,8 +16,7 @@ class ScanQrPage extends StatefulWidget {
 class _ScanQrPageState extends State<ScanQrPage> {
   CameraController? _cameraController;
   bool _isCameraInitialized = false;
-  bool _isNfcAvailable = false;
-  bool _isListeningForNfc = false;
+  late NfcService _nfcService;
 
   static const double _cornerRadius = 16;
 
@@ -25,7 +24,7 @@ class _ScanQrPageState extends State<ScanQrPage> {
   void initState() {
     super.initState();
     _initializeCamera();
-    _initializeNfc();
+    _initializeNfcService();
   }
 
   Future<void> _initializeCamera() async {
@@ -48,107 +47,94 @@ class _ScanQrPageState extends State<ScanQrPage> {
     }
   }
 
-  Future<void> _initializeNfc() async {
-    try {
-      _isNfcAvailable = await NfcManager.instance.isAvailable();
-      if (_isNfcAvailable) {
-        _startNfcSession();
+  void _initializeNfcService() {
+    _nfcService = NfcService();
+    _nfcService.addListener(_onNfcServiceChange);
+    _nfcService.checkNfcState(mode: NfcBarMode.readOnly);
+  }
+
+  void _onNfcServiceChange() {
+    if (!mounted) return;
+
+    if (_nfcService.lastReadMessage != null &&
+        _nfcService.currentMode == NfcBarMode.readOnly) {
+      final ndefData = _nfcService.lastReadMessage!;
+
+      appLayoutKey.currentState?.showNotification(
+        text: "Dispositivo NFC detectado",
+        icon: Icons.nfc,
+      );
+
+      String? paymentData = _extractPaymentData(ndefData);
+
+      if (paymentData != null) {
+        _nfcService.clearLastReadMessage();
+
+        _navigateToPaymentConfirmation(paymentData);
+      } else {
+        appLayoutKey.currentState?.showNotification(
+          text: "No se pudo leer los datos NFC",
+          icon: Icons.error,
+        );
+        _nfcService.clearLastReadMessage();
       }
-    } catch (e) {
-      debugPrint("NFC initialization error: $e");
-      _isNfcAvailable = false;
+    }
+
+    // Verificar errores
+    if (_nfcService.lastError != null) {
+      appLayoutKey.currentState?.showNotification(
+        text: "Error al leer NFC: ${_nfcService.lastError}",
+        icon: Icons.error,
+      );
     }
   }
 
-  void _startNfcSession() {
-    if (_isListeningForNfc) return;
+  String? _extractPaymentData(Map<String, dynamic> ndefData) {
+    try {
+      final records = ndefData['records'] as List<dynamic>?;
+      if (records != null && records.isNotEmpty) {
+        for (final record in records) {
+          final recordMap = record as Map<String, dynamic>;
+          final data = recordMap['data'];
 
-    setState(() => _isListeningForNfc = true);
-
-    NfcManager.instance.startSession(
-      onDiscovered: (NfcTag tag) async {
-        try {
-          // Show notification that NFC device was detected
-          appLayoutKey.currentState?.showNotification(
-            text: "Dispositivo NFC detectado",
-            icon: Icons.nfc,
-          );
-
-          final ndef = Ndef.from(tag);
-          if (ndef != null && ndef.cachedMessage != null) {
-            final message = ndef.cachedMessage!;
-
-            // Look for text/plain records
-            for (final record in message.records) {
-              if (record.type.length >= 1 && record.type[0] == 0x54) {
-                // 'T' for text record
-                final payloadBytes = record.payload;
-                if (payloadBytes.isNotEmpty) {
-                  // Skip the language code byte(s) - simple parsing
-                  final textStart =
-                      payloadBytes[0] + 1; // Language code length + 1
-                  if (textStart < payloadBytes.length) {
-                    final text =
-                        String.fromCharCodes(payloadBytes.sublist(textStart));
-
-                    // Navigate to payment confirmation page
-                    if (mounted) {
-                      _navigateToPaymentConfirmation(text);
-                    }
-                    return;
-                  }
-                }
-              }
-              // Also try text/plain MIME type
-              else if (String.fromCharCodes(record.type) == 'text/plain') {
-                final text = String.fromCharCodes(record.payload);
-                if (mounted) {
-                  _navigateToPaymentConfirmation(text);
-                }
-                return;
-              }
+          if (data != null) {
+            if (data is Map<String, dynamic>) {
+              return data.toString();
+            } else if (data is String) {
+              return data;
             }
           }
-
-          // If no valid text found
-          appLayoutKey.currentState?.showNotification(
-            text: "No se pudo leer los datos NFC",
-            icon: Icons.error,
-          );
-        } catch (e) {
-          debugPrint("Error reading NFC: $e");
-          appLayoutKey.currentState?.showNotification(
-            text: "Error al leer NFC",
-            icon: Icons.error,
-          );
         }
-      },
-    );
+      }
+
+      final rawData = ndefData['rawData'] as String?;
+      if (rawData != null && rawData.isNotEmpty) {
+        return rawData;
+      }
+
+      return null;
+    } catch (e) {
+      debugPrint("Error extracting payment data: $e");
+      return null;
+    }
   }
 
   void _navigateToPaymentConfirmation(String paymentData) {
-    // Stop NFC session before navigation
-    NfcManager.instance.stopSession();
-    setState(() => _isListeningForNfc = false);
-
     // Show success notification
     appLayoutKey.currentState?.showNotification(
       text: "Datos recibidos: $paymentData",
       icon: Icons.check,
     );
 
-    // TODO: Navigate to payment confirmation page
-    // Navigator.push(context, MaterialPageRoute(
-    //   builder: (context) => PaymentConfirmationPage(paymentData: paymentData)
-    // ));
+    // Navigate to payment confirmation page using the navigation system
+    appLayoutKey.currentState?.navigateToPaymentConfirmation(paymentData);
   }
 
   @override
   void dispose() {
     _cameraController?.dispose();
-    if (_isListeningForNfc) {
-      NfcManager.instance.stopSession();
-    }
+    _nfcService.removeListener(_onNfcServiceChange);
+    _nfcService.dispose();
     super.dispose();
   }
 
