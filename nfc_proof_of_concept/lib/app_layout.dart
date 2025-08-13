@@ -10,6 +10,7 @@ import 'package:nfc_proof_of_concept/scan_qr_page.dart';
 import 'package:nfc_proof_of_concept/payment_confirmation_page.dart';
 import 'package:nfc_proof_of_concept/navigation/navigation_controller.dart';
 import 'package:nfc_proof_of_concept/navigation/app_pages.dart';
+import 'package:nfc_proof_of_concept/services/app_launch_service.dart';
 
 class AppLayout extends StatefulWidget {
   const AppLayout({super.key});
@@ -19,7 +20,8 @@ class AppLayout extends StatefulWidget {
 }
 
 class AppLayoutState extends State<AppLayout> with TickerProviderStateMixin {
-  late NavigationController _navigationController;
+  NavigationController? _navigationController;
+  bool _isInitialized = false;
 
   // Páginas persistentes para preservar estado
   late final RecievePaymentPage _receivePaymentPage;
@@ -39,12 +41,29 @@ class AppLayoutState extends State<AppLayout> with TickerProviderStateMixin {
   void initState() {
     super.initState();
 
+    _initializeApp();
+  }
+
+  Future<void> _initializeApp() async {
+    // Initialize launch service
+    await AppLaunchService.instance.initialize();
+
+    // Determine initial page based on launch type
+    final AppPage initialPage =
+        AppLaunchService.instance.launchedFromTechDiscovered
+            ? AppPage.scanQr
+            : AppPage.receivePayment;
+
     // Inicializar páginas persistentes
     _receivePaymentPage = const RecievePaymentPage();
     _scanQrPage = const ScanQrPage();
 
-    _navigationController = NavigationController();
-    _navigationController.addListener(_onNavigationChanged);
+    _navigationController = NavigationController(initialPage: initialPage);
+    _navigationController!.addListener(_onNavigationChanged);
+
+    // Set up callback for TECH_DISCOVERED while app is running
+    AppLaunchService.instance
+        .setTechDiscoveredCallback(_handleTechDiscoveredWhileRunning);
 
     _notificationController = AnimationController(
       vsync: this,
@@ -63,16 +82,34 @@ class AppLayoutState extends State<AppLayout> with TickerProviderStateMixin {
 
     _fadeAnimation = _notificationController
         .drive(fadeTween.chain(CurveTween(curve: const Interval(0.25, 1.0))));
+
+    if (mounted) {
+      setState(() {
+        _isInitialized = true;
+      });
+    }
   }
 
   void _onNavigationChanged() {
     setState(() {});
   }
 
+  void _handleTechDiscoveredWhileRunning() {
+    // When TECH_DISCOVERED is received while app is running, navigate to ScanQrPage
+    if (mounted && _navigationController != null) {
+      _navigationController!.initializeToScanQr();
+
+      showNotification(
+        text: "NFC detectado - Navegando a escaneo",
+        icon: Icons.nfc,
+      );
+    }
+  }
+
   @override
   void dispose() {
-    _navigationController.removeListener(_onNavigationChanged);
-    _navigationController.dispose();
+    _navigationController?.removeListener(_onNavigationChanged);
+    _navigationController?.dispose();
     _notificationController.dispose();
     _notificationTimer?.cancel();
     super.dispose();
@@ -80,19 +117,23 @@ class AppLayoutState extends State<AppLayout> with TickerProviderStateMixin {
 
   // Métodos públicos para navegación
   void navigateToPaymentConfirmation(String paymentData) {
+    if (_navigationController == null) return;
+
     // Crear nueva instancia de PaymentConfirmation solo si es necesario
     _paymentConfirmationPage =
         PaymentConfirmationPage(paymentData: paymentData);
-    _navigationController.navigateToPage(AppPage.paymentConfirmation,
-        paymentData: paymentData);
+    _navigationController!
+        .navigateToPage(AppPage.paymentConfirmation, paymentData: paymentData);
   }
 
   void goBack() {
+    if (_navigationController == null) return;
+
     // Si volvemos desde PaymentConfirmation, limpiar la instancia
-    if (_navigationController.currentPage == AppPage.paymentConfirmation) {
+    if (_navigationController!.currentPage == AppPage.paymentConfirmation) {
       _paymentConfirmationPage = null;
     }
-    _navigationController.goBack();
+    _navigationController!.goBack();
   }
 
   void showNotification({required String text, required IconData icon}) {
@@ -112,11 +153,10 @@ class AppLayoutState extends State<AppLayout> with TickerProviderStateMixin {
   }
 
   void _onItemTapped(int index) {
-    _navigationController.navigateToTab(index);
+    _navigationController?.navigateToTab(index);
   }
 
   Widget _getCurrentPage() {
-    // Siempre mostrar el IndexedStack para preservar estado de páginas principales
     return IndexedStack(
       index: _getCurrentTabIndex(),
       children: [
@@ -127,7 +167,9 @@ class AppLayoutState extends State<AppLayout> with TickerProviderStateMixin {
   }
 
   int _getCurrentTabIndex() {
-    final currentPage = _navigationController.currentPage;
+    if (_navigationController == null) return 0;
+
+    final currentPage = _navigationController!.currentPage;
     switch (currentPage) {
       case AppPage.receivePayment:
         return 0;
@@ -135,16 +177,17 @@ class AppLayoutState extends State<AppLayout> with TickerProviderStateMixin {
         return 1;
       case AppPage.paymentConfirmation:
         // En confirmación de pago, mantener la última tab activa
-        return _navigationController.navigationStack.length > 1
+        return _navigationController!.navigationStack.length > 1
             ? _getCurrentTabIndexFromPreviousPage()
             : 1;
     }
   }
 
   int _getCurrentTabIndexFromPreviousPage() {
-    if (_navigationController.navigationStack.length < 2) return 1;
-    final previousPage = _navigationController
-        .navigationStack[_navigationController.navigationStack.length - 2];
+    if (_navigationController == null ||
+        _navigationController!.navigationStack.length < 2) return 1;
+    final previousPage = _navigationController!
+        .navigationStack[_navigationController!.navigationStack.length - 2];
     return previousPage == AppPage.receivePayment ? 0 : 1;
   }
 
@@ -159,11 +202,22 @@ class AppLayoutState extends State<AppLayout> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    const Color bgRed = Colors.red;
+    // Show loading screen while initializing
+    if (!_isInitialized || _navigationController == null) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(
+            color: Color.fromRGBO(0xae, 0x09, 0x00, 1),
+          ),
+        ),
+      );
+    }
+
+    const Color bgRed = Color.fromRGBO(0xae, 0x09, 0x00, 1);
     const Color inactiveGreyText = Color.fromARGB(255, 163, 163, 163);
 
     final currentTabIndex = _getCurrentTabIndex();
-    final showBackButton = _navigationController.canGoBack;
+    final showBackButton = _navigationController!.canGoBack;
 
     return Scaffold(
         appBar: AppBar(
@@ -179,7 +233,7 @@ class AppLayoutState extends State<AppLayout> with TickerProviderStateMixin {
                   color: Colors.white, size: 22),
           titleSpacing: 0,
           title: Text(
-            _navigationController.getCurrentPageTitle(),
+            _navigationController!.getCurrentPageTitle(),
             style:
                 const TextStyle(fontFamily: 'SpaceMono', color: Colors.white),
           ),
@@ -190,8 +244,8 @@ class AppLayoutState extends State<AppLayout> with TickerProviderStateMixin {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight.add(const Alignment(2, 1)),
                 colors: const [
-                  Color.fromARGB(255, 248, 244, 237),
-                  Color.fromARGB(255, 222, 222, 221),
+                  Color.fromARGB(255, 239, 235, 228),
+                  Color.fromARGB(255, 197, 197, 197),
                 ]),
           ),
           child: Stack(
@@ -201,7 +255,7 @@ class AppLayoutState extends State<AppLayout> with TickerProviderStateMixin {
               _getCurrentPage(),
 
               // Overlay para PaymentConfirmation si está activa
-              if (_navigationController.currentPage ==
+              if (_navigationController!.currentPage ==
                   AppPage.paymentConfirmation)
                 _buildPaymentConfirmationOverlay(),
 

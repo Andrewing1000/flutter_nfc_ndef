@@ -11,6 +11,14 @@ class NavigationController extends ChangeNotifier {
   AppPage get currentPage => _navigationStack.last;
   bool get canGoBack => _navigationStack.length > 1;
 
+  // Constructor that allows setting initial page
+  NavigationController({AppPage? initialPage}) {
+    if (initialPage != null) {
+      _navigationStack.clear();
+      _navigationStack.add(initialPage);
+    }
+  }
+
   String? getPaymentDataForPage(AppPage page) {
     return _pagePaymentData[page];
   }
@@ -42,6 +50,14 @@ class NavigationController extends ChangeNotifier {
       _navigationStack.add(AppPage.scanQr);
     }
 
+    notifyListeners();
+  }
+
+  void initializeToScanQr() {
+    // Método específico para inicializar directamente en ScanQrPage
+    _navigationStack.clear();
+    _pagePaymentData.clear();
+    _navigationStack.add(AppPage.scanQr);
     notifyListeners();
   }
 
