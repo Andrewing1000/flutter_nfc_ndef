@@ -1,9 +1,12 @@
 // lib/scan_qr_page.dart
 
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:nfc_proof_of_concept/nfc_active_bar.dart';
 import 'package:nfc_proof_of_concept/services/nfc_service.dart';
+import 'package:nfc_proof_of_concept/nfc_aid_helper.dart';
 import './main.dart';
 
 class ScanQrPage extends StatefulWidget {
@@ -16,7 +19,8 @@ class ScanQrPage extends StatefulWidget {
 class _ScanQrPageState extends State<ScanQrPage> {
   CameraController? _cameraController;
   bool _isCameraInitialized = false;
-  late NfcService _nfcService;
+  Uint8List? aid;
+  bool isLoadingAid = true;
 
   static const double _cornerRadius = 16;
 
@@ -24,7 +28,7 @@ class _ScanQrPageState extends State<ScanQrPage> {
   void initState() {
     super.initState();
     _initializeCamera();
-    _initializeNfcService();
+    _loadAid();
   }
 
   Future<void> _initializeCamera() async {
@@ -47,94 +51,147 @@ class _ScanQrPageState extends State<ScanQrPage> {
     }
   }
 
-  void _initializeNfcService() {
-    _nfcService = NfcService();
-    _nfcService.addListener(_onNfcServiceChange);
-    _nfcService.checkNfcState(mode: NfcBarMode.readOnly);
-  }
-
-  void _onNfcServiceChange() {
-    if (!mounted) return;
-
-    if (_nfcService.lastReadMessage != null &&
-        _nfcService.currentMode == NfcBarMode.readOnly) {
-      final ndefData = _nfcService.lastReadMessage!;
-
-      appLayoutKey.currentState?.showNotification(
-        text: "Dispositivo NFC detectado",
-        icon: Icons.nfc,
-      );
-
-      String? paymentData = _extractPaymentData(ndefData);
-
-      if (paymentData != null) {
-        _nfcService.clearLastReadMessage();
-
-        _navigateToPaymentConfirmation(paymentData);
-      } else {
+  Future<void> _loadAid() async {
+    try {
+      final retrievedAid = await NfcAidHelper.getAidFromXml();
+      if (mounted) {
+        setState(() {
+          aid = retrievedAid;
+          isLoadingAid = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          isLoadingAid = false;
+        });
         appLayoutKey.currentState?.showNotification(
-          text: "No se pudo leer los datos NFC",
-          icon: Icons.error,
-        );
-        _nfcService.clearLastReadMessage();
+            text: "Error al cargar AID: $e", icon: Icons.error);
       }
     }
+  }
 
-    // Verificar errores
-    if (_nfcService.lastError != null) {
+  void _onError(String error) {
+    appLayoutKey.currentState?.showNotification(
+      text: "Error al leer NFC: $error",
+      icon: Icons.error,
+    );
+  }
+
+  void _onDiscovered() {
+    appLayoutKey.currentState?.showNotification(
+      text: "Dispositivo NFC detectado",
+      icon: Icons.nfc,
+    );
+  }
+
+  void _onMessageRead(Map<String, dynamic> ndefData) {
+    try {
+      // The new NdefReaderService returns merged JSON data directly
+      // No need to extract from nested records structure
+      if (_isPaymentData(ndefData)) {
+        final paymentData = _formatPaymentData(ndefData);
+        _navigateToPaymentConfirmation(paymentData);
+        return;
+      }
+
+      // No valid payment data found
       appLayoutKey.currentState?.showNotification(
-        text: "Error al leer NFC: ${_nfcService.lastError}",
+        text: "No se encontraron datos de pago válidos",
+        icon: Icons.error,
+      );
+    } catch (e) {
+      debugPrint("Error processing NDEF data: $e");
+      appLayoutKey.currentState?.showNotification(
+        text: "Error al procesar datos NFC",
         icon: Icons.error,
       );
     }
   }
 
-  String? _extractPaymentData(Map<String, dynamic> ndefData) {
-    try {
-      final records = ndefData['records'] as List<dynamic>?;
-      if (records != null && records.isNotEmpty) {
-        for (final record in records) {
-          final recordMap = record as Map<String, dynamic>;
-          final data = recordMap['data'];
+  bool _isPaymentData(Map<String, dynamic> data) {
+    // Check for common payment fields
+    const paymentFields = [
+      'amount',
+      'currency',
+      'recipient',
+      'payment',
+      'transaction',
+      'transfer',
+      'money'
+    ];
 
-          if (data != null) {
-            if (data is Map<String, dynamic>) {
-              return data.toString();
-            } else if (data is String) {
-              return data;
-            }
-          }
-        }
-      }
+    return paymentFields.any((field) =>
+        data.keys.any((key) => key.toString().toLowerCase().contains(field)));
+  }
 
-      final rawData = ndefData['rawData'] as String?;
-      if (rawData != null && rawData.isNotEmpty) {
-        return rawData;
-      }
+  bool _isSimplePaymentString(String data) {
+    // Check if string looks like payment data (contains currency symbols or payment keywords)
+    final lowerData = data.toLowerCase();
+    const indicators = [
+      '\$',
+      '€',
+      '£',
+      '¥',
+      'usd',
+      'eur',
+      'pay',
+      'amount',
+      'transfer'
+    ];
 
-      return null;
-    } catch (e) {
-      debugPrint("Error extracting payment data: $e");
-      return null;
+    return indicators.any((indicator) => lowerData.contains(indicator));
+  }
+
+  String _formatPaymentData(Map<String, dynamic> paymentData) {
+    // Create a clean, readable format for payment confirmation
+    final buffer = StringBuffer();
+
+    // Add amount if present
+    final amount =
+        paymentData['amount'] ?? paymentData['value'] ?? paymentData['money'];
+    final currency = paymentData['currency'] ?? paymentData['curr'] ?? '\$';
+
+    if (amount != null) {
+      buffer.write('Monto: $currency$amount\n');
     }
+
+    // Add recipient if present
+    final recipient =
+        paymentData['recipient'] ?? paymentData['to'] ?? paymentData['payee'];
+    if (recipient != null) {
+      buffer.write('Para: $recipient\n');
+    }
+
+    // Add concept/description if present
+    final concept = paymentData['concept'] ??
+        paymentData['description'] ??
+        paymentData['memo'];
+    if (concept != null) {
+      buffer.write('Concepto: $concept\n');
+    }
+
+    // If no structured data, return JSON string
+    if (buffer.isEmpty) {
+      return json.encode(paymentData);
+    }
+
+    return buffer.toString().trim();
   }
 
   void _navigateToPaymentConfirmation(String paymentData) {
-    // Show success notification
     appLayoutKey.currentState?.showNotification(
-      text: "Datos recibidos: $paymentData",
+      text: "Datos de pago recibidos correctamente",
       icon: Icons.check,
     );
 
-    // Navigate to payment confirmation page using the navigation system
+    debugPrint("Payment data extracted: $paymentData");
     appLayoutKey.currentState?.navigateToPaymentConfirmation(paymentData);
   }
 
   @override
   void dispose() {
     _cameraController?.dispose();
-    _nfcService.removeListener(_onNfcServiceChange);
-    _nfcService.dispose();
     super.dispose();
   }
 
@@ -172,7 +229,14 @@ class _ScanQrPageState extends State<ScanQrPage> {
               ),
             ),
           ),
-          _UiHintsBelowCutout(cutoutSize: cutoutSize),
+          _UiHintsBelowCutout(
+            cutoutSize: cutoutSize,
+            aid: aid,
+            isLoadingAid: isLoadingAid,
+            onDiscovered: _onDiscovered,
+            onReadError: _onError,
+            onRead: _onMessageRead,
+          ),
         ],
       ),
     );
@@ -253,8 +317,20 @@ class _QrScannerOverlayClipper extends CustomClipper<Path> {
 
 class _UiHintsBelowCutout extends StatelessWidget {
   final double cutoutSize;
+  final Uint8List? aid;
+  final bool isLoadingAid;
+  final void Function()? onDiscovered;
+  final void Function(String error)? onReadError;
+  final void Function(Map<String, dynamic> data)? onRead;
 
-  const _UiHintsBelowCutout({required this.cutoutSize});
+  const _UiHintsBelowCutout({
+    required this.cutoutSize,
+    required this.aid,
+    required this.isLoadingAid,
+    this.onDiscovered,
+    this.onReadError,
+    this.onRead,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -285,10 +361,37 @@ class _UiHintsBelowCutout extends StatelessWidget {
             padding: EdgeInsets.only(bottom: padding.bottom + 24),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 320),
-              child: const NfcActiveBar(
-                clearText: true,
-                mode: NfcBarMode.readOnly,
-              ),
+              child: aid != null
+                  ? NfcActiveBar(
+                      whiteText: true,
+                      mode: NfcBarMode.readOnly,
+                      onDiscovered: onDiscovered,
+                      onReadError: onReadError,
+                      onRead: onRead,
+                      aid: aid!,
+                    )
+                  : Container(
+                      height: 38,
+                      alignment: Alignment.center,
+                      child: isLoadingAid
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor:
+                                    AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          : const Text(
+                              'Error cargando AID',
+                              style: TextStyle(
+                                color: Colors.red,
+                                fontFamily: 'SpaceMono',
+                                fontSize: 14,
+                              ),
+                            ),
+                    ),
             ),
           ),
         ),

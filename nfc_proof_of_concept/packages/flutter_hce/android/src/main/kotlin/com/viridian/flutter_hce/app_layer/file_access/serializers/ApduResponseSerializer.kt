@@ -5,11 +5,14 @@ import com.viridian.flutter_hce.app_layer.ApduSerializer
 import com.viridian.flutter_hce.app_layer.Bytes
 import com.viridian.flutter_hce.app_layer.file_access.fields.ApduStatusWord
 
-class ApduResponse private constructor(
-    private val data: ApduData?,
-    private val statusWord: ApduStatusWord,
+class ApduResponse(
+    data: ApduData?,
+    statusWord: ApduStatusWord,
     name: String
 ) : ApduSerializer(name) {
+    // Register fields following Kotlin serializer architecture
+    private val dataField = register(data)
+    private val statusWordField = register(statusWord)
 
     companion object {
         fun fromBytes(rawResponse: Bytes): ApduResponse {
@@ -43,10 +46,5 @@ class ApduResponse private constructor(
             }
             return ApduResponse(null, errorStatus, "Error Response")
         }
-    }
-
-    override fun setFields() {
-        fields.clear()
-        fields.addAll(listOfNotNull(data, statusWord))
     }
 }

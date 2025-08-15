@@ -18,9 +18,9 @@ import 'ndef_reader_service.dart';
 
 enum NfcBarMode { broadcastOnly, readOnly }
 
-/// Manages NFC state and operations as a ChangeNotifier
+/// Pure callback-based NFC service without ChangeNotifier
 /// Supports both HCE (Host Card Emulation) and NFC Manager modes
-class NfcService extends ChangeNotifier {
+class NfcService {
   bool _isReady = false;
   bool _isChecking = false;
   bool _isTransactionActive = false;
@@ -30,7 +30,7 @@ class NfcService extends ChangeNotifier {
 
   bool _nfcSessionActive = false;
   FlutterHceManager? _hceManager;
-  final NdefReaderService _ndefReader = NdefReaderService();
+  NdefReaderService? _ndefReader;
 
   bool get isReady => _isReady;
   bool get isChecking => _isChecking;
@@ -39,51 +39,59 @@ class NfcService extends ChangeNotifier {
   String? get lastError => _lastError;
   Map<String, dynamic>? get lastReadMessage => _lastReadMessage;
 
+  final void Function()? onDiscovered;
+  final void Function(Map<String, dynamic>)? onRead;
+  final void Function(String error)? onReadError;
+  final void Function()? onDelivered;
+  final void Function(ApduCommand command, ApduResponse response)? onFileAccess;
+
+  NfcService({
+    this.onDiscovered,
+    this.onRead,
+    this.onReadError,
+    this.onDelivered,
+    this.onFileAccess,
+  });
+
   Future<bool> checkNfcState({
     String? broadcastData,
     NfcBarMode? mode,
-    List<int>? aid,
+    required Uint8List aid,
   }) async {
     if (_isChecking) return _isReady;
 
-    _setChecking(true); 
+    _setChecking(true);
     _clearErrorQuietly();
-
 
     try {
       final isNfcAvailable = await NfcManager.instance.isAvailable();
 
       if (!isNfcAvailable) {
-        // _setErrorQuietly('NFC no está disponible en este dispositivo');
         _setReadyQuietly(false);
-        notifyListeners();
         return false;
       }
-      
-      if (mode == NfcBarMode.broadcastOnly && aid != null) {
+
+      if (mode == NfcBarMode.broadcastOnly) {
         return await _initializeHceMode(broadcastData, aid);
       } else if (mode == NfcBarMode.readOnly) {
-        return await _initializeReadMode();
+        return await _initializeReadMode(aid);
       } else {
         _setErrorQuietly('Modo o AID no especificados correctamente');
         _setReadyQuietly(false);
-        notifyListeners(); 
         return false;
       }
     } catch (e) {
       _setErrorQuietly('Error al inicializar NFC: $e');
       _setReadyQuietly(false);
-      notifyListeners(); 
       return false;
     } finally {
-      _setChecking(false); 
+      _setChecking(false);
     }
   }
 
-  Future<bool> _initializeHceMode(String? broadcastData, List<int> aid) async {
+  Future<bool> _initializeHceMode(String? broadcastData, Uint8List aid) async {
     try {
       await _stopAll();
-
 
       _hceManager = FlutterHceManager.instance;
       final nfcState = await _hceManager!.checkNfcState();
@@ -125,9 +133,9 @@ class NfcService extends ChangeNotifier {
       print("llegamos aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
       print(aid);
       print(broadcastData);
-      
+
       final success = await _hceManager!.initialize(
-        aid: Uint8List.fromList(aid),
+        aid: aid,
         records: records,
         isWritable: false,
         maxNdefFileSize: 4096,
@@ -138,56 +146,55 @@ class NfcService extends ChangeNotifier {
 
       if (success) {
         debugPrint(
-            'HCE initialized successfully with AID: ${AidUtils.formatAid(Uint8List.fromList(aid))}');
+            'HCE initialized successfully with AID: ${AidUtils.formatAid(aid)}');
         return true;
       } else {
         _setErrorQuietly('No se pudo inicializar HCE');
         _setReadyQuietly(false);
-        notifyListeners();
         return false;
       }
     } catch (e) {
       _setErrorQuietly('Error en modo HCE: $e');
       _setReadyQuietly(false);
-      notifyListeners();
       debugPrint('HCE Error: $e');
       return false;
     }
   }
 
-  Future<bool> _initializeReadMode() async {
+  Future<bool> _initializeReadMode(Uint8List aid) async {
     try {
       await _stopAll();
 
+      // Initialize the NdefReaderService with the provided AID
+      _ndefReader = NdefReaderService(aid: aid);
+
       _setCurrentModeQuietly(NfcBarMode.readOnly);
       _setReadyQuietly(true);
-      notifyListeners(); 
 
       NfcManager.instance.startSession(
         onDiscovered: (NfcTag tag) async {
           _setTransactionActiveQuietly(true);
-          notifyListeners();
 
           try {
-            final ndefData = await _ndefReader.readNdefFromTag(tag);
+            final ndefData = await _ndefReader?.readNdefFromTag(tag);
             if (ndefData != null) {
               debugPrint('NDEF Data read successfully: $ndefData');
-              
-              // Guardar el mensaje leído
+
               _lastReadMessage = ndefData;
-              
+              onRead?.call(_lastReadMessage!);
             } else {
+              onReadError?.call('No NDEF data found or read failed');
               debugPrint('No NDEF data found or read failed');
               _lastReadMessage = null;
             }
           } catch (e) {
             debugPrint('Error reading NDEF data: $e');
+            onReadError?.call('No NDEF data found or read failed');
             _setErrorQuietly('Error leyendo datos NDEF: $e');
             _lastReadMessage = null;
           } finally {
             Timer(const Duration(milliseconds: 1500), () {
               _setTransactionActiveQuietly(false);
-              notifyListeners();
             });
           }
         },
@@ -198,7 +205,6 @@ class NfcService extends ChangeNotifier {
     } catch (e) {
       _setErrorQuietly('Error en modo lectura: $e');
       _setReadyQuietly(false);
-      notifyListeners();
       return false;
     }
   }
@@ -230,10 +236,7 @@ class NfcService extends ChangeNotifier {
   }
 
   void _setReady(bool ready) {
-    if (_isReady != ready) {
-      _isReady = ready;
-      notifyListeners();
-    }
+    _isReady = ready;
   }
 
   void _setReadyQuietly(bool ready) {
@@ -241,10 +244,7 @@ class NfcService extends ChangeNotifier {
   }
 
   void _setChecking(bool checking) {
-    if (_isChecking != checking) {
-      _isChecking = checking;
-      notifyListeners();
-    }
+    _isChecking = checking;
   }
 
   void _setCheckingQuietly(bool checking) {
@@ -257,10 +257,7 @@ class NfcService extends ChangeNotifier {
   }
 
   void _setTransactionActive(bool active) {
-    if (_isTransactionActive != active) {
-      _isTransactionActive = active;
-      notifyListeners();
-    }
+    _isTransactionActive = active;
   }
 
   void _setTransactionActiveQuietly(bool active) {
@@ -268,10 +265,7 @@ class NfcService extends ChangeNotifier {
   }
 
   void _setCurrentMode(NfcBarMode? mode) {
-    if (_currentMode != mode) {
-      _currentMode = mode;
-      notifyListeners();
-    }
+    _currentMode = mode;
   }
 
   void _setCurrentModeQuietly(NfcBarMode? mode) {
@@ -279,10 +273,7 @@ class NfcService extends ChangeNotifier {
   }
 
   void _setError(String? error) {
-    if (_lastError != error) {
-      _lastError = error;
-      notifyListeners();
-    }
+    _lastError = error;
   }
 
   void _setErrorQuietly(String? error) {
@@ -299,7 +290,6 @@ class NfcService extends ChangeNotifier {
 
   void clearLastReadMessage() {
     _lastReadMessage = null;
-    notifyListeners();
   }
 
   void reset() {
@@ -310,20 +300,27 @@ class NfcService extends ChangeNotifier {
     _setCurrentModeQuietly(null);
     _clearErrorQuietly();
     _lastReadMessage = null;
-    notifyListeners(); // Solo notificar el reset completo
   }
 
   void _onHceTransaction(ApduCommand command, ApduResponse response) {
     debugPrint(
         'HCE Transaction: ${command.toString()} -> ${response.toString()}');
 
-    // BROADCAST MODE: Notificar cuando un lector ha leído exitosamente el NDEF file
+    onFileAccess?.call(command, response);
+
+    if (command is SelectCommand && response.statusWord == ApduStatusWord.ok) {
+      onDiscovered?.call();
+    }
+
+    if (command is ReadBinaryCommand &&
+        response.statusWord == ApduStatusWord.ok) {
+      onDelivered?.call();
+    }
+
     _setTransactionActiveQuietly(true);
-    notifyListeners(); // Notificar lectura exitosa por parte del lector
 
     Future.delayed(const Duration(seconds: 2), () {
       _setTransactionActiveQuietly(false);
-      notifyListeners(); // Notificar fin de transacción
     });
   }
 
@@ -340,9 +337,7 @@ class NfcService extends ChangeNotifier {
     // No notificar en errores
   }
 
-  @override
   void dispose() {
     reset();
-    super.dispose();
   }
 }

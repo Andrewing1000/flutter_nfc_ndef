@@ -298,7 +298,7 @@ class _PaymentConfirmationPageState extends State<PaymentConfirmationPage> {
               SizedBox(
                 width: 100,
                 child: Text(
-                  '$key:',
+                  '$key: ${value.toString()}',
                   style: const TextStyle(
                     fontFamily: 'SpaceMono',
                     fontSize: 14,

@@ -1,63 +1,74 @@
 package com.viridian.flutter_hce.app_layer
 
-import java.nio.ByteBuffer
-
 typealias Bytes = ByteArray
 
 abstract class ApduField(val name: String, initialSize: Int) {
-    protected var buffer: Bytes = ByteArray(initialSize)
-    protected var size: Int = initialSize
+    protected var _buffer: Bytes = ByteArray(initialSize)
+    open val buffer: Bytes
+        get() = _buffer;
 
-    val length: Int get() = size
-    
-    open fun toByteArray(): Bytes {
-        return buffer.copyOf(size)
+    open val length: Int
+        get() = _buffer.size;
+
+    protected fun setBuffer(newBytes: Bytes) {
+        _buffer = newBytes.copyOf()
     }
 
-    override fun toString(): String {
-        return buffer.take(size).joinToString(" ") { "%02X".format(it) }
+    override fun toString(): String =
+        buffer.joinToString(" ") { "%02X".format(it.toInt() and 0xFF) }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is ApduField) return false
+        return buffer.contentEquals(other.buffer)
     }
+
+    override fun hashCode(): Int = buffer.contentHashCode()
 }
 
-abstract class ApduSerializer(name: String, initialSize: Int = 0) : ApduField(name, initialSize) {
-    protected val fields: MutableList<ApduField?> = mutableListOf()
+abstract class ApduSerializer(name: String) : ApduField(name, 0) {
+    private val fields: MutableList<ApduField?> = mutableListOf()
 
-    init {
-        setFields()
-        serialize()
+    protected fun <T : ApduField?> register(field: T): T {
+        fields.add(field)
+        return field
     }
 
-    /**
-     * Populates the `fields` list with all potential fields for serialization.
-     * Null values will be ignored during serialization.
-     */
-    abstract fun setFields()
+    final override val buffer: Bytes
+        get(){
+            serialize();
+            return _buffer;
+        }
 
-    override fun toByteArray(): Bytes {
-        serialize()
-        return super.toByteArray()
-    }
+    final override val length: Int
+        get(){
+            var res = 0;
+            for(currField in fields){
+                res += currField?.length ?: 0;
+            }
+            return res;
+        }
 
-    private fun serialize() {
-        val builder = mutableListOf<Byte>()
+    final fun serialize(){
+        val result = ByteArray(this.length)
+        var offset = 0
+        
         for (field in fields) {
             if (field != null) {
-                builder.addAll(field.toByteArray().toList())
+                val fieldBytes = field.buffer
+                System.arraycopy(fieldBytes, 0, result, offset, fieldBytes.size)
+                offset += fieldBytes.size
             }
         }
-        buffer = builder.toByteArray()
-        size = buffer.size
+        _buffer = result;
     }
 
-    override fun toString(): String {
-        return fields.mapNotNull { field ->
-            field?.let { " | ${it.name}: $it" }
-        }.joinToString("")
-    }
+    override fun toString(): String =
+        fields.mapNotNull { field -> field?.let { " | ${it.name}: $it" } }.joinToString("")
 }
 
 open class ApduData(data: Bytes, name: String) : ApduField(name, data.size) {
     init {
-        buffer = data.copyOf()
+        setBuffer(data)
     }
 }

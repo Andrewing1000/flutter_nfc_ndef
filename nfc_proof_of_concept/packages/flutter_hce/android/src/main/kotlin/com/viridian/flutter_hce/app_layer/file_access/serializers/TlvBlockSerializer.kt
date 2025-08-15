@@ -20,13 +20,13 @@ class FileControlTlv : ApduSerializer {
          * Named constructor for a standard NDEF File Control TLV.
          * Uses the standard NDEF Tag (0x04) and File ID (0xE104).
          */
-        fun ndef(maxNdefFileSize: Int, isNdefWritable: Boolean): FileControlTlv {
+    fun ndef(maxNdefFileSize: Int, isNdefWritable: Boolean): FileControlTlv {
             return FileControlTlv(
                 "NDEF File Control TLV",
                 TlvTag.ndef,
                 FileIdField.forNdef,
                 MaxFileSizeField(maxNdefFileSize),
-                WriteAccessField(isNdefWritable)
+        WriteAccessField.fromWritable(isNdefWritable)
             )
         }
 
@@ -34,7 +34,7 @@ class FileControlTlv : ApduSerializer {
          * Named constructor for a Proprietary File Control TLV.
          * Uses the standard Proprietary Tag (0x05) and a custom File ID.
          */
-        fun proprietary(
+    fun proprietary(
             proprietaryFileId: Int,
             maxProprietaryFileSize: Int,
             isProprietaryWritable: Boolean
@@ -44,7 +44,7 @@ class FileControlTlv : ApduSerializer {
                 TlvTag.proprietary,
                 FileIdField(proprietaryFileId),
                 MaxFileSizeField(maxProprietaryFileSize),
-                WriteAccessField(isProprietaryWritable)
+        WriteAccessField.fromWritable(isProprietaryWritable)
             )
         }
     }
@@ -60,17 +60,13 @@ class FileControlTlv : ApduSerializer {
         this.fileId = fileId
         this.maxFileSize = maxFileSize
         this.writeAccess = writeAccess
-    }
 
-    override fun setFields() {
-        fields.clear()
-        fields.addAll(listOf(
-            tag,
-            tagLength,
-            fileId,
-            maxFileSize,
-            readAccess,
-            writeAccess
-        ))
+        // Register fields in the defined order
+        register(this.tag)
+        register(this.tagLength)
+        register(this.fileId)
+        register(this.maxFileSize)
+        register(this.readAccess)
+        register(this.writeAccess)
     }
 }

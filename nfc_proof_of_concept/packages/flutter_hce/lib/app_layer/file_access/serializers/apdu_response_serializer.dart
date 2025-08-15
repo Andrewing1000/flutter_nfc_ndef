@@ -3,6 +3,8 @@ import 'dart:typed_data';
 import '../../field.dart';
 import '../fields/response_fields.dart';
 
+export '../fields/response_fields.dart';
+
 class ApduResponse extends ApduSerializer {
   final ApduData? data;
   final ApduStatusWord statusWord;

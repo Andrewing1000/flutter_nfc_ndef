@@ -14,9 +14,22 @@ class CcLenField(len: Int) : ApduField("CCLEN", 2) {
     }
 }
 
-class CcMappingVersionField private constructor(version: Int) : ApduField("MappingVersion", 1) {
+class CcMappingVersionField private constructor(version: Int, name: String) : ApduField(name, 1) {
     companion object {
-        val v2_0 = CcMappingVersionField(0x20)
+        /** Predefined instance for version 2.0 (0x20) with descriptive name */
+        val v2_0: CcMappingVersionField = CcMappingVersionField(0x20, "MappingVersion (2.0)")
+
+        /**
+         * Factory that returns a predefined instance when available, otherwise creates a new one
+         * with a descriptive name like "MappingVersion (major.minor)" unless a custom name is provided.
+         */
+        fun fromByte(version: Int, name: String? = null): CcMappingVersionField {
+            if (version == 0x20) return v2_0
+            val major = (version ushr 4) and 0x0F
+            val minor = version and 0x0F
+            val effectiveName = name ?: "MappingVersion ($major.$minor)"
+            return CcMappingVersionField(version, effectiveName)
+        }
     }
 
     init {

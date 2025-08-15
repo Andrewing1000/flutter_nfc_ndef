@@ -108,6 +108,12 @@ class NdefTypeLengthField(length: Int) : ApduField("Type Length", 1) {
     companion object {
         val zero = NdefTypeLengthField(0)
         val forWkt = NdefTypeLengthField(1)
+
+        fun of(length: Int): NdefTypeLengthField = when (length) {
+            0 -> zero
+            1 -> forWkt
+            else -> NdefTypeLengthField(length)
+        }
     }
 
     init {
@@ -154,6 +160,16 @@ private class LongNdefPayloadLengthField(private val payloadLength: Int) : NdefP
 }
 
 class NdefIdLengthField(length: Int) : ApduField("ID Length", 1) {
+    companion object {
+        val zero = NdefIdLengthField(0)
+        val one = NdefIdLengthField(1)
+
+        fun of(length: Int): NdefIdLengthField = when (length) {
+            0 -> zero
+            1 -> one
+            else -> NdefIdLengthField(length)
+        }
+    }
     init {
         require(length in 0..255) { "ID Length is invalid." }
         buffer[0] = length.toByte()
@@ -178,10 +194,39 @@ class NdefTypeField(typeBytes: Bytes, val tnf: Tnf) : ApduData(typeBytes, "Type"
         val uri = wellKnown("U")
         val smartPoster = wellKnown("Sp")
         val textPlain = mediaType("text/plain")
+        val textJson = mediaType("text/json")
 
         val empty = NdefTypeField(ByteArray(0), Tnf.EMPTY)
         val unknown = NdefTypeField(ByteArray(0), Tnf.UNKNOWN)
         val unchanged = NdefTypeField(ByteArray(0), Tnf.UNCHANGED)
+
+        /** Smart factory mirroring Dart: reuse predefined instances when possible */
+        fun of(typeBytes: Bytes, tnf: Tnf): NdefTypeField {
+            return when (tnf) {
+                Tnf.WELL_KNOWN -> {
+                    // Handle common WKT types
+                    val str = try { String(typeBytes, StandardCharsets.US_ASCII) } catch (_: Exception) { null }
+                    when (str) {
+                        "T" -> text
+                        "U" -> uri
+                        "Sp" -> smartPoster
+                        else -> NdefTypeField(typeBytes, tnf)
+                    }
+                }
+                Tnf.MEDIA_TYPE -> {
+                    val mime = try { String(typeBytes, StandardCharsets.US_ASCII) } catch (_: Exception) { null }
+                    when (mime) {
+                        "text/plain" -> textPlain
+                        "text/json" -> textJson
+                        else -> NdefTypeField(typeBytes, tnf)
+                    }
+                }
+                Tnf.EMPTY -> if (typeBytes.isEmpty()) empty else NdefTypeField(typeBytes, tnf)
+                Tnf.UNKNOWN -> if (typeBytes.isEmpty()) unknown else NdefTypeField(typeBytes, tnf)
+                Tnf.UNCHANGED -> if (typeBytes.isEmpty()) unchanged else NdefTypeField(typeBytes, tnf)
+                else -> NdefTypeField(typeBytes, tnf)
+            }
+        }
     }
 }
 
@@ -189,10 +234,21 @@ class NdefIdField : ApduData {
     constructor(id: Bytes) : super(id, "ID")
 
     companion object {
+        val empty = NdefIdField(ByteArray(0))
+
+        fun of(id: Bytes): NdefIdField {
+            return if (id.isEmpty()) empty else NdefIdField(id)
+        }
         fun fromAscii(id: String): NdefIdField {
+            if (id.isEmpty()) return empty
             return NdefIdField(id.toByteArray(StandardCharsets.US_ASCII))
         }
     }
 }
 
-class NdefPayload(payload: Bytes) : ApduData(payload, "Payload")
+class NdefPayload(payload: Bytes) : ApduData(payload, "Payload") {
+    companion object {
+        val empty = NdefPayload(ByteArray(0))
+        fun of(payload: Bytes): NdefPayload = if (payload.isEmpty()) empty else NdefPayload(payload)
+    }
+}

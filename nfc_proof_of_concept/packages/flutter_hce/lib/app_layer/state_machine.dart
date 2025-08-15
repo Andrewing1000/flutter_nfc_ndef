@@ -2,9 +2,9 @@ import 'dart:math';
 import 'dart:typed_data';
 import 'dart:async';
 
-import 'errors.dart';
 import 'file_access/serializers/tlv_block_serializer.dart';
 import 'file_access/fields/command_fields.dart';
+import 'file_access/fields/response_fields.dart';
 import 'file_access/serializers/apdu_command_serializer.dart';
 import 'file_access/serializers/apdu_response_serializer.dart';
 import 'file_access/serializers/capability_container_serializer.dart';
@@ -20,15 +20,17 @@ enum _HceState {
 class _NdefFile {
   late Uint8List _bytes;
   final int maxSize;
+  bool _inWriteSession = false;
+  final List<int> _stagedPayload = <int>[];
 
   Uint8List get buffer => _bytes;
   int get currentSize => _bytes.length;
 
   _NdefFile({required NdefMessageSerializer message, required this.maxSize}) {
-    update(message);
+    _bytes = _buildBytes(message);
   }
 
-  void update(NdefMessageSerializer message) {
+  Uint8List _buildBytes(NdefMessageSerializer message) {
     final messageBytes = message.buffer;
     final nlen = messageBytes.length;
 
@@ -37,29 +39,82 @@ class _NdefFile {
           'NDEF message size ($nlen bytes) exceeds the max file size ($maxSize bytes) defined in the CC.');
     }
 
-    final nlenBytes = Uint8List(2);
-    nlenBytes[0] = (nlen >> 8) & 0xFF;
-    nlenBytes[1] = nlen & 0xFF;
+    final result = Uint8List(2 + messageBytes.length);
+    result[0] = (nlen >> 8) & 0xFF;
+    result[1] = nlen & 0xFF;
+    result.setRange(2, result.length, messageBytes);
+    return result;
+  }
 
-    _bytes = Uint8List.fromList(nlenBytes + messageBytes);
+  void update(NdefMessageSerializer message) {
+    _bytes = _buildBytes(message);
+    _inWriteSession = false;
+    _stagedPayload.clear();
+  }
+
+  void beginWriteSession() {
+    // Set NLEN=0 to mark file as empty during write, per NFC Forum Type 4
+    _bytes = Uint8List.fromList([0x00, 0x00]);
+    _inWriteSession = true;
+    _stagedPayload.clear();
+  }
+
+  bool writeData(int offset, Uint8List data) {
+    if (!_inWriteSession) return false;
+    if (offset < 2) return false; // Only NLEN is at 0..1; data must go at >=2
+    final payloadOffset = offset - 2;
+    final endIndex = payloadOffset + data.length;
+    if (2 + endIndex > maxSize) return false;
+
+    // Ensure capacity
+    if (_stagedPayload.length < endIndex) {
+      final toAdd = endIndex - _stagedPayload.length;
+      _stagedPayload.addAll(List<int>.filled(toAdd, 0));
+    }
+
+    for (int i = 0; i < data.length; i++) {
+      _stagedPayload[payloadOffset + i] = data[i];
+    }
+    return true;
+  }
+
+  bool finalizeWrite(int nlen) {
+    if (!_inWriteSession) return false;
+    if (nlen < 0 || 2 + nlen > maxSize) return false;
+    if (_stagedPayload.length < nlen) return false;
+
+    final result = Uint8List(2 + nlen);
+    result[0] = (nlen >> 8) & 0xFF;
+    result[1] = nlen & 0xFF;
+    result.setRange(2, result.length, _stagedPayload.take(nlen));
+
+    _bytes = result;
+    _inWriteSession = false;
+    _stagedPayload.clear();
+    return true;
   }
 }
 
 class HceStateMachine {
   _HceState _currentState = _HceState.idle;
 
+  final Uint8List aid;
   final CapabilityContainer capabilityContainer;
   final _NdefFile ndefFile;
+  final bool isWritable;
 
-  // El AID estándar para la aplicación NDEF.
+  // Standard NDEF AID per NFC Forum specification
   static final ndefAid =
-      Uint8List.fromList([0xA0, 0x00, 0xDA, 0xDA, 0xDA, 0xDA, 0xDA]);
+      Uint8List.fromList([0xD2, 0x76, 0x00, 0x00, 0x85, 0x01, 0x01]);
 
   HceStateMachine({
+    Uint8List? aid,
     required NdefMessageSerializer initialMessage,
     bool isWritable = false,
     int maxNdefFileSize = 2048, // 2KB
-  })  : capabilityContainer = CapabilityContainer(
+  })  : aid = aid ?? ndefAid,
+        isWritable = isWritable,
+        capabilityContainer = CapabilityContainer(
           fileDescriptors: [
             FileControlTlv.ndef(
               maxNdefFileSize: maxNdefFileSize,
@@ -82,15 +137,9 @@ class HceStateMachine {
       final command = ApduCommand.fromBytes(rawCommand);
       final response = await _handleCommand(command);
       return response.buffer;
-    } on ArgumentError catch (e) {
-      throw HceException(HceErrorCode.invalidNdefFormat, "APDU Parsing Error",
-          details: e.toString());
-    } on UnimplementedError catch (e) {
-      throw HceException(HceErrorCode.invalidState, "Unsupported instruction",
-          details: e.toString());
-    } catch (e) {
-      throw HceException(HceErrorCode.unknown, "Unexpected FSM error",
-          details: e.toString());
+    } catch (_) {
+      // Return generic error response for any parsing or processing failures
+      return ApduResponse.error(ApduStatusWord.fromBytes(0x6F, 0x00)).buffer;
     }
   }
 
@@ -110,22 +159,27 @@ class HceStateMachine {
 
   ApduResponse _handleIdleState(ApduCommand command) {
     if (command is SelectCommand) {
-      if (command.params == ApduParams.byName &&
-          _isNdefAid(command.data.buffer)) {
-        _currentState = _HceState.appSelected;
-        return ApduResponse.success();
+      if (command.params == ApduParams.byName) {
+        if (_isNdefAid(command.data.buffer)) {
+          _currentState = _HceState.appSelected;
+          return ApduResponse.success();
+        } else {
+          return ApduResponse.error(ApduStatusWord.fileNotFound);
+        }
       }
+      return ApduResponse.error(ApduStatusWord.wrongP1P2);
     }
-    throw HceException(
-        HceErrorCode.invalidState, "Invalid command in IDLE state");
+    return ApduResponse.error(ApduStatusWord.insNotSupported);
   }
 
   ApduResponse _handleAppSelectedState(ApduCommand command) {
-    if (command is SelectCommand && command.params == ApduParams.byFileId) {
+    if (command is SelectCommand) {
+      if (command.params != ApduParams.byFileId) {
+        return ApduResponse.error(ApduStatusWord.wrongP1P2);
+      }
       final data = command.data.buffer;
       if (data.length < 2) {
-        throw HceException(
-            HceErrorCode.invalidFileId, "File ID must be 2 bytes");
+        return ApduResponse.error(ApduStatusWord.wrongLength);
       }
 
       final fileId = (data[0] << 8) | data[1];
@@ -137,41 +191,49 @@ class HceStateMachine {
           _currentState = _HceState.ndefSelected;
           return ApduResponse.success();
         default:
-          throw HceException(HceErrorCode.fileNotFound,
-              "File ID 0x${fileId.toRadixString(16).padLeft(4, '0')} not found");
+          return ApduResponse.error(ApduStatusWord.fileNotFound);
       }
     }
-    throw HceException(
-        HceErrorCode.invalidState, "Invalid command in APP_SELECTED state");
+    return ApduResponse.error(ApduStatusWord.insNotSupported);
   }
 
   ApduResponse _handleCcSelectedState(ApduCommand command) {
-    if (command is ReadBinaryCommand) {
-      return _processRead(command, capabilityContainer.buffer);
+    switch (command.runtimeType) {
+      case ReadBinaryCommand:
+        return _processRead(
+            command as ReadBinaryCommand, capabilityContainer.buffer);
+      case SelectCommand:
+        return _handleAppSelectedState(command); // allow re-selecting files
+      case UpdateBinaryCommand:
+        return ApduResponse.error(ApduStatusWord.conditionsNotSatisfied);
+      default:
+        return ApduResponse.error(ApduStatusWord.insNotSupported);
     }
-    throw HceException(HceErrorCode.invalidState,
-        "Only READ_BINARY commands are allowed in CC_SELECTED state");
   }
 
   ApduResponse _handleNdefSelectedState(ApduCommand command) {
-    if (command is ReadBinaryCommand) {
-      return _processRead(command, ndefFile.buffer);
+    switch (command.runtimeType) {
+      case ReadBinaryCommand:
+        return _processRead(command as ReadBinaryCommand, ndefFile.buffer);
+      case UpdateBinaryCommand:
+        return _processUpdate(command as UpdateBinaryCommand);
+      case SelectCommand:
+        return _handleAppSelectedState(
+            command); // allow switching between files
+      default:
+        return ApduResponse.error(ApduStatusWord.insNotSupported);
     }
-    throw HceException(HceErrorCode.invalidState,
-        "Only READ_BINARY commands are allowed in NDEF_SELECTED state");
   }
 
   ApduResponse _processRead(ReadBinaryCommand command, Uint8List file) {
     final offset = command.offset;
     if (offset >= file.length) {
-      throw HceException(HceErrorCode.invalidState,
-          "Read offset ${offset} exceeds file length ${file.length}");
+      return ApduResponse.error(ApduStatusWord.wrongOffset);
     }
 
     final lengthToRead = command.lengthToRead == 0 ? 256 : command.lengthToRead;
     if (lengthToRead > 256) {
-      throw HceException(HceErrorCode.bufferOverflow,
-          "Requested length ${lengthToRead} exceeds maximum allowed (256 bytes)");
+      return ApduResponse.error(ApduStatusWord.wrongLength);
     }
 
     final bytesRemaining = file.length - offset;
@@ -181,10 +243,48 @@ class HceStateMachine {
     return ApduResponse.success(data: chunk);
   }
 
-  bool _isNdefAid(Uint8List aid) {
-    if (aid.length != ndefAid.length) return false;
-    for (int i = 0; i < aid.length; i++) {
-      if (aid[i] != ndefAid[i]) return false;
+  ApduResponse _processUpdate(UpdateBinaryCommand command) {
+    try {
+      if (!isWritable) {
+        return ApduResponse.error(ApduStatusWord.conditionsNotSatisfied);
+      }
+
+      final offset = command.offset;
+      final data = command.dataToWrite;
+
+      if (offset == 0) {
+        if (data.length != 2) {
+          return ApduResponse.error(ApduStatusWord.wrongLength);
+        }
+        final nlen = (data[0] << 8) | data[1];
+        if (nlen == 0) {
+          ndefFile.beginWriteSession();
+          return ApduResponse.success();
+        } else {
+          final ok = ndefFile.finalizeWrite(nlen);
+          return ok
+              ? ApduResponse.success()
+              : ApduResponse.error(ApduStatusWord.wrongLength);
+        }
+      }
+      if (offset == 1) {
+        // Partial NLEN writes are not allowed
+        return ApduResponse.error(ApduStatusWord.wrongP1P2);
+      }
+      // Data area write
+      final ok = ndefFile.writeData(offset, data);
+      return ok
+          ? ApduResponse.success()
+          : ApduResponse.error(ApduStatusWord.conditionsNotSatisfied);
+    } catch (_) {
+      return ApduResponse.error(ApduStatusWord.fromBytes(0x6F, 0x00));
+    }
+  }
+
+  bool _isNdefAid(Uint8List aidToCheck) {
+    if (aidToCheck.length != aid.length) return false;
+    for (int i = 0; i < aidToCheck.length; i++) {
+      if (aidToCheck[i] != aid[i]) return false;
     }
     return true;
   }

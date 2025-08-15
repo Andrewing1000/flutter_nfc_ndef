@@ -56,7 +56,7 @@ private class NdefParser(private val rawMessage: Bytes) {
                     validateFirstChunk(flags)
                     chunkState = ChunkedRecordState.AWAITING_MIDDLE_OR_END_CHUNK
                     reassembledPayload.clear()
-                    reassembledPayload.addAll((payload?.toByteArray() ?: ByteArray(0)).toList())
+                    reassembledPayload.addAll((payload?.buffer ?: ByteArray(0)).toList())
                     reassembledType = type
                     reassembledId = id
                     null
@@ -75,7 +75,7 @@ private class NdefParser(private val rawMessage: Bytes) {
             }
             ChunkedRecordState.AWAITING_MIDDLE_OR_END_CHUNK -> {
                 validateSubsequentChunk(flags)
-                reassembledPayload.addAll((payload?.toByteArray() ?: ByteArray(0)).toList())
+                reassembledPayload.addAll((payload?.buffer ?: ByteArray(0)).toList())
                 if (flags.isChunked) {
                     null
                 } else {
@@ -184,6 +184,12 @@ class NdefMessageSerializer private constructor(
     private val records: List<NdefRecordSerializer>
 ) : ApduSerializer("NDEF Message") {
 
+    init {
+        for (rec in records) {
+            register(rec)
+        }
+    }
+
     companion object {
         fun fromBytes(rawMessage: Bytes): NdefMessageSerializer {
             require(rawMessage.isNotEmpty()) { "Cannot parse an empty NDEF message." }
@@ -211,10 +217,5 @@ class NdefMessageSerializer private constructor(
             }
             return NdefMessageSerializer(serializedRecords)
         }
-    }
-
-    override fun setFields() {
-        fields.clear()
-        fields.addAll(records)
     }
 }

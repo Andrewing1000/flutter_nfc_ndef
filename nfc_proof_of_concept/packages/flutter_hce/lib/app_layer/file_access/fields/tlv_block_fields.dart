@@ -65,14 +65,10 @@ class ReadAccessField extends ApduField {
     buffer[0] = access;
   }
 
-  /// Smart constructor that tries to return existing static final instances first
   factory ReadAccessField.fromByte(int accessByte, {String? name}) {
-    // Try to match with existing static final instances
     if (accessByte == 0x00) {
       return granted;
     }
-
-    // If no match found, create new instance
     final effectiveName = name ??
         "Read Access (0x${accessByte.toRadixString(16).padLeft(2, '0').toUpperCase()})";
     return ReadAccessField._internal(accessByte, name: effectiveName);
@@ -90,21 +86,17 @@ class WriteAccessField extends ApduField {
     buffer[0] = access;
   }
 
-  /// Smart constructor that tries to return existing static final instances first
   factory WriteAccessField({required bool isWritable}) {
     return isWritable ? granted : denied;
   }
 
-  /// Smart constructor from raw byte value
   factory WriteAccessField.fromByte(int accessByte, {String? name}) {
-    // Try to match with existing static final instances
     if (accessByte == 0x00) {
       return granted;
     } else if (accessByte == 0xFF) {
       return denied;
     }
 
-    // If no match found, create new instance
     final effectiveName = name ??
         "Write Access (0x${accessByte.toRadixString(16).padLeft(2, '0').toUpperCase()})";
     return WriteAccessField._internal(accessByte, name: effectiveName);

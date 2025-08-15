@@ -5,19 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:nfc_manager/nfc_manager.dart';
 import 'package:nfc_manager/platform_tags.dart';
 import 'package:flutter_hce/app_layer/utils/apdu_command_parser.dart';
+import 'package:flutter_hce/app_layer/ndef_format/serializers/ndef_message_serializer.dart';
 
 class NdefReaderService {
-  static const List<int> _ndefApplicationId = [
-    0xD2,
-    0x76,
-    0x00,
-    0x00,
-    0x85,
-    0x01,
-    0x01
-  ];
-
+  final Uint8List aid;
   static const int _defaultChunkSize = 240;
+  NdefReaderService({required this.aid});
 
   Future<Map<String, dynamic>?> readNdefFromTag(NfcTag tag) async {
     final isoDep = IsoDep.from(tag);
@@ -68,7 +61,7 @@ class NdefReaderService {
 
   Future<bool> _selectNdefApplication(IsoDep isoDep) async {
     final selectAppCommand = ApduCommandParser.selectByName(
-      applicationId: _ndefApplicationId,
+      applicationId: aid,
     );
 
     final response = await isoDep.transceive(data: selectAppCommand.toBytes());
@@ -169,70 +162,73 @@ class NdefReaderService {
 
   Map<String, dynamic>? _parseNdefData(Uint8List ndefBytes) {
     if (ndefBytes.isEmpty) {
-      return {'empty': true};
+      debugPrint('NDEF data is empty');
+      return null;
     }
 
     try {
-      debugPrint('Parsing NDEF data: ${_formatBytes(ndefBytes)}');
+      debugPrint(
+          'Parsing NDEF data using proper NDEF message serializer: ${_formatBytes(ndefBytes)}');
 
-      final result = <String, dynamic>{
-        'rawData': _formatBytes(ndefBytes),
-        'length': ndefBytes.length,
-        'records': <Map<String, dynamic>>[]
-      };
+      // Use the proper NDEF message serializer to parse records
+      final ndefMessage = NdefMessageSerializer.fromBytes(ndefBytes);
+      final mergedData = <String, dynamic>{};
 
-      int offset = 0;
-      while (offset < ndefBytes.length) {
-        if (offset + 3 >= ndefBytes.length) break;
+      debugPrint('Found ${ndefMessage.records.length} NDEF records');
 
-        final flags = ndefBytes[offset];
-        final typeLength = ndefBytes[offset + 1];
-        final payloadLength = ndefBytes[offset + 2];
-
-        if (offset + 3 + typeLength + payloadLength > ndefBytes.length) break;
-
-        final payload = ndefBytes.sublist(
-            offset + 3 + typeLength, offset + 3 + typeLength + payloadLength);
-
-        _parseNdefRecord(payload, result);
-
-        offset += 3 + typeLength + payloadLength;
-
-        if ((flags & 0x80) != 0 && (flags & 0x40) != 0) break;
+      // Process each record and merge JSON-parseable data
+      for (final record in ndefMessage.records) {
+        final recordData = _extractJsonDataFromRecord(record);
+        if (recordData != null) {
+          debugPrint('Found JSON-parseable record: ${recordData.keys}');
+          mergedData.addAll(recordData);
+        } else {
+          debugPrint('Skipped non-JSON record with type: ${record.type.tnf}');
+        }
       }
 
-      debugPrint('Parsed ${result['records'].length} NDEF records');
-      return result;
+      if (mergedData.isEmpty) {
+        debugPrint('No JSON-parseable records found in NDEF message');
+        return null;
+      }
+
+      debugPrint('Merged JSON data: $mergedData');
+      return mergedData;
     } catch (e) {
-      debugPrint('Error parsing NDEF data: $e');
-      return {
-        'error': 'Failed to parse NDEF data: $e',
-        'rawData': _formatBytes(ndefBytes)
-      };
+      debugPrint('Error parsing NDEF data with proper serializer: $e');
+      return null;
     }
   }
 
-  void _parseNdefRecord(Uint8List payload, Map<String, dynamic> result) {
+  Map<String, dynamic>? _extractJsonDataFromRecord(dynamic record) {
     try {
-      final decodedPayload = utf8.decode(payload);
-      try {
-        final jsonData = json.decode(decodedPayload);
-        result['records'].add({
-          'type': 'application/json',
-          'data': jsonData,
-          'raw': decodedPayload
-        });
-      } catch (e) {
-        result['records'].add({
-          'type': 'text/plain',
-          'data': decodedPayload,
-        });
+      // Use the convenient getter methods from NdefRecordSerializer
+
+      // First priority: Direct JSON records
+      final jsonData = record.jsonContent;
+      if (jsonData != null) {
+        debugPrint('Found JSON record: $jsonData');
+        return jsonData;
       }
+
+      // Second priority: Text records that might contain JSON
+      final textData = record.textContent;
+      if (textData != null) {
+        try {
+          final parsedJson = json.decode(textData);
+          if (parsedJson is Map<String, dynamic>) {
+            debugPrint('Found JSON in text record: $parsedJson');
+            return parsedJson;
+          }
+        } catch (_) {
+          // Not valid JSON, ignore
+        }
+      }
+
+      return null;
     } catch (e) {
-      result['records'].add({
-        'type': 'application/octet-stream',
-        'data': payload,
-      });
+      debugPrint('Error extracting JSON from NDEF record: $e');
+      return null;
     }
   }
 

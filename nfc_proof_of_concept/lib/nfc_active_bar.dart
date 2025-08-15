@@ -3,24 +3,35 @@ import 'package:flutter/material.dart';
 import 'services/nfc_service.dart';
 import 'widgets/nfc_pulse_manager.dart';
 import 'widgets/nfc_pulse_painter.dart';
+import 'package:flutter_hce/hce_manager.dart';
 
 // Re-export for backward compatibility
 export 'services/nfc_service.dart' show NfcBarMode;
 
 class NfcActiveBar extends StatefulWidget {
   final bool toggle;
-  final bool clearText;
+  final bool whiteText;
   final String broadcastData;
   final NfcBarMode mode;
-  final Uint8List? aid; // Add AID parameter
+  final Uint8List aid;
+  final void Function(Map<String, dynamic>)? onRead;
+  final void Function(String error)? onReadError;
+  final void Function()? onDelivered;
+  final void Function()? onDiscovered;
+  final void Function(ApduCommand command, ApduResponse response)? onFileAccess;
 
   const NfcActiveBar({
     super.key,
     this.toggle = false,
-    this.clearText = false,
+    this.whiteText = false,
     this.broadcastData = " ",
     this.mode = NfcBarMode.broadcastOnly,
-    this.aid,
+    required this.aid,
+    this.onDiscovered,
+    this.onReadError,
+    this.onRead,
+    this.onDelivered,
+    this.onFileAccess,
   });
 
   @override
@@ -29,9 +40,8 @@ class NfcActiveBar extends StatefulWidget {
 
 class _NfcActiveBarState extends State<NfcActiveBar>
     with TickerProviderStateMixin {
-  bool loading =
-      true; // Inicializar como true para mostrar carga desde el inicio
-  bool _isCheckingNfc = false; // Variable separada para controlar la ejecución
+  bool loading = true;
+  bool _isCheckingNfc = false;
   late final NfcService _nfcService;
   late final NfcPulseManager _pulseManager;
 
@@ -41,15 +51,39 @@ class _NfcActiveBarState extends State<NfcActiveBar>
   @override
   void initState() {
     super.initState();
-    _nfcService = NfcService();
+    _nfcService = NfcService(
+        onRead: _onMessageRead,
+        onDelivered: _onMessageDelivered,
+        onDiscovered: _onDiscovered,
+        onReadError: widget.onReadError,
+        onFileAccess: _onFileAccess);
     _pulseManager = NfcPulseManager();
     _pulseManager.initialize(this, getContainerSize: _getContainerSize);
 
-    // Listen to both services
+    // Listen to pulse manager only
     _pulseManager.addListener(_onPulseUpdate);
-    _nfcService.addListener(_onNfcServiceUpdate);
 
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkNfc());
+  }
+
+  void _onDiscovered() {
+    _onNfcServiceUpdate();
+    widget.onDiscovered?.call();
+  }
+
+  void _onMessageRead(Map<String, dynamic> message) {
+    _onNfcServiceUpdate();
+    widget.onRead?.call(message);
+  }
+
+  void _onMessageDelivered() {
+    _onNfcServiceUpdate();
+    widget.onDelivered?.call();
+  }
+
+  void _onFileAccess(ApduCommand command, ApduResponse response) {
+    _onNfcServiceUpdate();
+    widget.onFileAccess?.call(command, response);
   }
 
   Size _getContainerSize() {
@@ -63,7 +97,6 @@ class _NfcActiveBarState extends State<NfcActiveBar>
   @override
   void dispose() {
     _pulseManager.removeListener(_onPulseUpdate);
-    _nfcService.removeListener(_onNfcServiceUpdate);
     _pulseManager.dispose();
     _nfcService.dispose();
     super.dispose();
@@ -91,8 +124,6 @@ class _NfcActiveBarState extends State<NfcActiveBar>
     if (_isCheckingNfc) return;
 
     _isCheckingNfc = true;
-
-    _nfcService.removeListener(_onNfcServiceUpdate);
 
     if (mounted && !loading) {
       setState(() {
@@ -132,9 +163,6 @@ class _NfcActiveBarState extends State<NfcActiveBar>
       print('Error en _checkNfc: $e');
     } finally {
       _isCheckingNfc = false;
-      if (mounted) {
-        _nfcService.addListener(_onNfcServiceUpdate);
-      }
     }
   }
 
@@ -161,9 +189,9 @@ class _NfcActiveBarState extends State<NfcActiveBar>
         : Colors.transparent;
 
     final fgColor =
-        (widget.clearText || isActiveUi) ? Colors.white : Colors.black;
+        (widget.whiteText || isActiveUi) ? Colors.white : Colors.black;
 
-    final rippleColor = (widget.clearText || isActiveUi ^ widget.toggle)
+    final rippleColor = (widget.whiteText || isActiveUi ^ widget.toggle)
         ? (_nfcService.isTransactionActive ? Colors.greenAccent : Colors.white)
         : const Color.fromARGB(255, 146, 146, 146);
 

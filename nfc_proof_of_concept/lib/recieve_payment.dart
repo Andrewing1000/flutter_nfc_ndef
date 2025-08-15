@@ -8,6 +8,7 @@ import './main.dart';
 
 class RecievePaymentPage extends StatefulWidget {
   const RecievePaymentPage({super.key});
+  final String data = "fkdsjnfaskdjfnadslfjnasdlkjfnasd";
 
   @override
   State createState() {
@@ -63,7 +64,7 @@ class RecievePaymentPageState extends State<RecievePaymentPage> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const Spacer(flex: 1),
-            const QRContainer(data: 'fadsfsdkanfkjasdnfsdafsdkjfnnasdkjfnasd'),
+            QRContainer(data: widget.data),
             const Spacer(flex: 1),
             if (isLoadingAid)
               const Center(
@@ -75,12 +76,13 @@ class RecievePaymentPageState extends State<RecievePaymentPage> {
                   ],
                 ),
               )
-            else if (aid != null)
+            else if(aid != null)
               NfcActiveBar(
-                broadcastData: 'fadsfsdkanfkjasdnfsdafsdkjfnnasdkjfnasd',
+                broadcastData: widget.data,
                 mode: NfcBarMode.broadcastOnly,
                 aid: aid!,
               )
+
             else
               const Center(
                 child: Column(

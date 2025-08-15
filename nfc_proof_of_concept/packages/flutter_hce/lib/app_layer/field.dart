@@ -68,6 +68,15 @@ abstract class ApduSerializer extends ApduField {
     return super.buffer;
   }
 
+  @override
+  int get length { 
+    var res = 0;
+    for(final field in fields){
+      res += field?.length ?? 0;
+    }
+    return res;
+  }
+
   void _serialize() {
     var builder = BytesBuilder(copy: false);
     for (final field in fields) {

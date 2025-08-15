@@ -7,6 +7,9 @@ import 'app_layer/file_access/serializers/apdu_command_serializer.dart';
 import 'app_layer/file_access/serializers/apdu_response_serializer.dart';
 import 'app_layer/ndef_format/serializers/ndef_record_serializer.dart';
 
+export 'app_layer/file_access/serializers/apdu_response_serializer.dart';
+export 'app_layer/file_access/serializers/apdu_command_serializer.dart';
+
 
 class FlutterHceManager {
   static FlutterHceManager? _instance;
