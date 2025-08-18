@@ -1,12 +1,4 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- NFC permissions for HCE -->
-    <uses-permission android:name="android.permission.NFC" />
-    
-    <!-- HCE feature requirement -->
-    <uses-feature
-        android:name="android.hardware.nfc.hce"
-        android:required="true" />
-        
     <application
         android:label="flutter_hce_example"
         android:name="${applicationName}"
@@ -32,31 +24,7 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-            
-            <intent-filter>
-                <action android:name="android.nfc.action.TECH_DISCOVERED" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-            
-            <meta-data 
-                android:name="android.nfc.action.TECH_DISCOVERED"
-                android:resource="@xml/nfc_tech_filter" />
         </activity>
-
-        <service
-            android:name="com.viridian.flutter_hce.AndroidHceService"
-            android:exported="true"
-            android:permission="android.permission.BIND_NFC_SERVICE">
-            
-            <intent-filter>
-                <action android:name="android.nfc.cardemulation.action.HOST_APDU_SERVICE" />
-            </intent-filter>
-            
-            <meta-data
-                android:name="android.nfc.cardemulation.host_apdu_service"
-                android:resource="@xml/hce_aid_list" />
-        </service>
-        
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

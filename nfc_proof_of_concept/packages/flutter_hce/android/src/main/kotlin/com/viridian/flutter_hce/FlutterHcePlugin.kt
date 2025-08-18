@@ -21,7 +21,7 @@ import com.viridian.flutter_hce.app_layer.*
 import com.viridian.flutter_hce.app_layer.ndef_format.fields.*
 import com.viridian.flutter_hce.app_layer.ndef_format.serializers.*
 
-class NfcHostCardEmulationPlugin : FlutterPlugin, MethodCallHandler, ActivityAware, StreamHandler {
+class FlutterHcePlugin : FlutterPlugin, MethodCallHandler, ActivityAware, StreamHandler {
     
     // ===== CHANNELS Y COMUNICACIÓN =====
     private lateinit var channel: MethodChannel
@@ -32,7 +32,10 @@ class NfcHostCardEmulationPlugin : FlutterPlugin, MethodCallHandler, ActivityAwa
     private var nfcAdapter: NfcAdapter? = null
     private var stateMachine: HceStateMachine? = null
 
-    
+    companion object{
+        const val TAG = "FlutterHcePlugin";
+    }
+
     private val hceBroadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
@@ -70,8 +73,6 @@ class NfcHostCardEmulationPlugin : FlutterPlugin, MethodCallHandler, ActivityAwa
 
     override fun onAttachedToEngine(flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
         Log.d(TAG, "Plugin attached to engine")
-        
-        setInstance(this)
         
         channel = MethodChannel(flutterPluginBinding.binaryMessenger, "nfc_host_card_emulation")
         channel.setMethodCallHandler(this)
@@ -216,22 +217,6 @@ class NfcHostCardEmulationPlugin : FlutterPlugin, MethodCallHandler, ActivityAwa
             result.error("NOT_INITIALIZED", "State Machine no inicializado. Llama init() primero.", null)
         } else {
             result.success("State machine initialized")
-        }
-    }
-
-    // ===== SINGLETON Y ACCESO ESTÁTICO =====
-
-    companion object {
-        private const val TAG = "NfcHostCardEmulation"
-        private var instance: NfcHostCardEmulationPlugin? = null
-        
-        @JvmStatic
-        fun getStateMachine(): HceStateMachine? {
-            return instance?.stateMachine
-        }
-        
-        internal fun setInstance(plugin: NfcHostCardEmulationPlugin) {
-            instance = plugin
         }
     }
 }

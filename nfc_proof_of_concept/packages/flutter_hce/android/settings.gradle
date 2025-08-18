@@ -1,18 +1,1 @@
-pluginManagement {
-    repositories {
-        gradlePluginPortal()
-        google()
-        mavenCentral()
-    }
-}
-
-dependencyResolutionManagement {
-    // Evita el choque con el repositorio maven que añade el plugin de Flutter
-    repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
-    repositories {
-        google()
-        mavenCentral()
-    }
-}
-
-rootProject.name = "flutter_hce"
+rootProject.name = 'flutter_hce'

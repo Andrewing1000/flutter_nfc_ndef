@@ -21,7 +21,6 @@ class AndroidHceService : HostApduService() {
 
         val stateMachine = HceManager.stateMachine
 
-        // Si aún no hay FSM, retornar error
         if (stateMachine == null) {
             Log.e("HCE_SERVICE", "HCE State Machine is not initialized. Flutter has not called init().")
             return conditionsNotSatisfiedResponse
