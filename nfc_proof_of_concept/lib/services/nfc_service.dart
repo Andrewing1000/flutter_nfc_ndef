@@ -4,15 +4,12 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:nfc_manager/nfc_manager.dart';
 
-// Import HCE components
 import 'package:flutter_hce/hce_manager.dart';
 import 'package:flutter_hce/hce_types.dart';
 import 'package:flutter_hce/hce_utils.dart';
 import 'package:flutter_hce/app_layer/utils/utils.dart';
 import 'package:flutter_hce/app_layer/utils/ndef_parser.dart';
 import 'package:flutter_hce/app_layer/ndef_format/serializers/ndef_record_serializer.dart';
-import 'package:flutter_hce/app_layer/file_access/serializers/apdu_command_serializer.dart';
-import 'package:flutter_hce/app_layer/file_access/serializers/apdu_response_serializer.dart';
 
 import 'ndef_reader_service.dart';
 
@@ -61,13 +58,13 @@ class NfcService {
     if (_isChecking) return _isReady;
 
     _setChecking(true);
-    _clearErrorQuietly();
+    _clearError();
 
     try {
       final isNfcAvailable = await NfcManager.instance.isAvailable();
 
       if (!isNfcAvailable) {
-        _setReadyQuietly(false);
+        _setReady(false);
         return false;
       }
 
@@ -76,13 +73,13 @@ class NfcService {
       } else if (mode == NfcBarMode.readOnly) {
         return await _initializeReadMode(aid);
       } else {
-        _setErrorQuietly('Modo o AID no especificados correctamente');
-        _setReadyQuietly(false);
+        _setError('Modo o AID no especificados correctamente');
+        _setReady(false);
         return false;
       }
     } catch (e) {
-      _setErrorQuietly('Error al inicializar NFC: $e');
-      _setReadyQuietly(false);
+      _setError('Error al inicializar NFC: $e');
+      _setReady(false);
       return false;
     } finally {
       _setChecking(false);
@@ -98,12 +95,12 @@ class NfcService {
       debugPrint('NFC State: ${nfcState.description}');
 
       if (nfcState != NfcState.enabled) {
-        _setErrorQuietly('NFC no está habilitado en este dispositivo');
+        _setError('NFC no está habilitado en este dispositivo');
         return false;
       }
 
-      _setCurrentModeQuietly(NfcBarMode.broadcastOnly);
-      _setReadyQuietly(true);
+      _setCurrentMode(NfcBarMode.broadcastOnly);
+      _setReady(true);
 
       List<NdefRecordSerializer> records = [];
 
@@ -130,10 +127,6 @@ class NfcService {
         records.add(ndefParser.serializer);
       }
 
-      print("llegamos aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-      print(aid);
-      print(broadcastData);
-
       final success = await _hceManager!.initialize(
         aid: aid,
         records: records,
@@ -149,13 +142,13 @@ class NfcService {
             'HCE initialized successfully with AID: ${AidUtils.formatAid(aid)}');
         return true;
       } else {
-        _setErrorQuietly('No se pudo inicializar HCE');
-        _setReadyQuietly(false);
+        _setError('No se pudo inicializar HCE');
+        _setReady(false);
         return false;
       }
     } catch (e) {
-      _setErrorQuietly('Error en modo HCE: $e');
-      _setReadyQuietly(false);
+      _setError('Error en modo HCE: $e');
+      _setReady(false);
       debugPrint('HCE Error: $e');
       return false;
     }
@@ -165,15 +158,16 @@ class NfcService {
     try {
       await _stopAll();
 
-      // Initialize the NdefReaderService with the provided AID
       _ndefReader = NdefReaderService(aid: aid);
 
-      _setCurrentModeQuietly(NfcBarMode.readOnly);
-      _setReadyQuietly(true);
+      _setCurrentMode(NfcBarMode.readOnly);
+      _setReady(true);
 
       NfcManager.instance.startSession(
         onDiscovered: (NfcTag tag) async {
-          _setTransactionActiveQuietly(true);
+          _setTransactionActive(true);
+
+          onDiscovered?.call();
 
           try {
             final ndefData = await _ndefReader?.readNdefFromTag(tag);
@@ -181,7 +175,7 @@ class NfcService {
               debugPrint('NDEF Data read successfully: $ndefData');
 
               _lastReadMessage = ndefData;
-              onRead?.call(_lastReadMessage!);
+              onRead?.call(ndefData);
             } else {
               onReadError?.call('No NDEF data found or read failed');
               debugPrint('No NDEF data found or read failed');
@@ -190,11 +184,11 @@ class NfcService {
           } catch (e) {
             debugPrint('Error reading NDEF data: $e');
             onReadError?.call('No NDEF data found or read failed');
-            _setErrorQuietly('Error leyendo datos NDEF: $e');
+            _setError('Error leyendo datos NDEF: $e');
             _lastReadMessage = null;
           } finally {
             Timer(const Duration(milliseconds: 1500), () {
-              _setTransactionActiveQuietly(false);
+              _setTransactionActive(false);
             });
           }
         },
@@ -203,8 +197,8 @@ class NfcService {
       _nfcSessionActive = true;
       return true;
     } catch (e) {
-      _setErrorQuietly('Error en modo lectura: $e');
-      _setReadyQuietly(false);
+      _setError('Error en modo lectura: $e');
+      _setReady(false);
       return false;
     }
   }
@@ -230,8 +224,8 @@ class NfcService {
     }
 
     if (stateChanged) {
-      _setCurrentModeQuietly(null);
-      _setReadyQuietly(false);
+      _setCurrentMode(null);
+      _setReady(false);
     }
   }
 
@@ -239,28 +233,11 @@ class NfcService {
     _isReady = ready;
   }
 
-  void _setReadyQuietly(bool ready) {
-    _isReady = ready;
-  }
-
   void _setChecking(bool checking) {
     _isChecking = checking;
   }
 
-  void _setCheckingQuietly(bool checking) {
-    _isChecking = checking;
-  }
-
-  // Método público para controlar manualmente el estado de carga
-  void setCheckingManually(bool checking) {
-    _setChecking(checking);
-  }
-
   void _setTransactionActive(bool active) {
-    _isTransactionActive = active;
-  }
-
-  void _setTransactionActiveQuietly(bool active) {
     _isTransactionActive = active;
   }
 
@@ -268,24 +245,12 @@ class NfcService {
     _currentMode = mode;
   }
 
-  void _setCurrentModeQuietly(NfcBarMode? mode) {
-    _currentMode = mode;
-  }
-
   void _setError(String? error) {
-    _lastError = error;
-  }
-
-  void _setErrorQuietly(String? error) {
     _lastError = error;
   }
 
   void _clearError() {
     _setError(null);
-  }
-
-  void _clearErrorQuietly() {
-    _setErrorQuietly(null);
   }
 
   void clearLastReadMessage() {
@@ -294,11 +259,11 @@ class NfcService {
 
   void reset() {
     _stopAll();
-    _setReadyQuietly(false);
-    _setCheckingQuietly(false);
-    _setTransactionActiveQuietly(false);
-    _setCurrentModeQuietly(null);
-    _clearErrorQuietly();
+    _setReady(false);
+    _setChecking(false);
+    _setTransactionActive(false);
+    _setCurrentMode(null);
+    _clearError();
     _lastReadMessage = null;
   }
 
@@ -307,34 +272,29 @@ class NfcService {
         'HCE Transaction: ${command.toString()} -> ${response.toString()}');
 
     onFileAccess?.call(command, response);
-
     if (command is SelectCommand && response.statusWord == ApduStatusWord.ok) {
       onDiscovered?.call();
     }
-
     if (command is ReadBinaryCommand &&
         response.statusWord == ApduStatusWord.ok) {
       onDelivered?.call();
     }
+    _setTransactionActive(true);
 
-    _setTransactionActiveQuietly(true);
-
-    Future.delayed(const Duration(seconds: 2), () {
-      _setTransactionActiveQuietly(false);
+    Future.delayed(const Duration(milliseconds: 1500), () {
+      _setTransactionActive(false);
     });
   }
 
   void _onHceDeactivation(HceDeactivationReason reason) {
     debugPrint('HCE Deactivated: ${reason.description}');
-    _setTransactionActiveQuietly(false);
-    // No notificar aquí, es solo desactivación
+    _setTransactionActive(false);
   }
 
   void _onHceError(HceException error) {
     debugPrint('HCE Error: ${error.toString()}');
-    _setErrorQuietly('Error HCE: ${error.message}');
-    _setTransactionActiveQuietly(false);
-    // No notificar en errores
+    _setError('Error HCE: ${error.message}');
+    _setTransactionActive(false);
   }
 
   void dispose() {

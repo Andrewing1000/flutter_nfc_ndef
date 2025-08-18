@@ -126,6 +126,58 @@ class AppLayoutState extends State<AppLayout> with TickerProviderStateMixin {
         .navigateToPage(AppPage.paymentConfirmation, paymentData: paymentData);
   }
 
+  // New method for navigating with complete NFC data
+  void navigateToDataDisplay(Map<String, dynamic> ndefData) {
+    if (_navigationController == null) return;
+
+    // Create a formatted string representation of the complete data
+    final dataString = _formatCompleteNdefData(ndefData);
+
+    // Crear nueva instancia de PaymentConfirmation que mostrará todos los datos
+    _paymentConfirmationPage = PaymentConfirmationPage(paymentData: dataString);
+    _navigationController!
+        .navigateToPage(AppPage.paymentConfirmation, paymentData: dataString);
+  }
+
+  // Helper method to format complete NDEF data for display
+  String _formatCompleteNdefData(Map<String, dynamic> ndefData) {
+    final buffer = StringBuffer();
+    buffer.writeln('=== DATOS NFC RECIBIDOS ===\n');
+
+    _formatMapRecursively(ndefData, buffer, 0);
+
+    return buffer.toString();
+  }
+
+  void _formatMapRecursively(
+      dynamic data, StringBuffer buffer, int indentLevel) {
+    final indent = '  ' * indentLevel;
+
+    if (data is Map<String, dynamic>) {
+      for (final entry in data.entries) {
+        buffer.write('$indent${entry.key}: ');
+        if (entry.value is Map || entry.value is List) {
+          buffer.writeln();
+          _formatMapRecursively(entry.value, buffer, indentLevel + 1);
+        } else {
+          buffer.writeln('${entry.value}');
+        }
+      }
+    } else if (data is List) {
+      for (int i = 0; i < data.length; i++) {
+        buffer.write('$indent[$i]: ');
+        if (data[i] is Map || data[i] is List) {
+          buffer.writeln();
+          _formatMapRecursively(data[i], buffer, indentLevel + 1);
+        } else {
+          buffer.writeln('${data[i]}');
+        }
+      }
+    } else {
+      buffer.writeln('$indent$data');
+    }
+  }
+
   void goBack() {
     if (_navigationController == null) return;
 

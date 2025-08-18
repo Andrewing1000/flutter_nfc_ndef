@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter_hce/app_layer/ndef_format/serializers/ndef_record_serializer.dart';
 import 'package:nfc_manager/nfc_manager.dart';
 import 'package:nfc_manager/platform_tags.dart';
 import 'package:flutter_hce/app_layer/utils/apdu_command_parser.dart';
@@ -173,61 +173,44 @@ class NdefReaderService {
       // Use the proper NDEF message serializer to parse records
       final ndefMessage = NdefMessageSerializer.fromBytes(ndefBytes);
       final mergedData = <String, dynamic>{};
+      final plainTexts = <String>[];
 
       debugPrint('Found ${ndefMessage.records.length} NDEF records');
 
       // Process each record and merge JSON-parseable data
-      for (final record in ndefMessage.records) {
-        final recordData = _extractJsonDataFromRecord(record);
-        if (recordData != null) {
-          debugPrint('Found JSON-parseable record: ${recordData.keys}');
-          mergedData.addAll(recordData);
+      for (final NdefRecordSerializer record in ndefMessage.records) {
+        // Extract JSON data directly
+        final jsonData = record.jsonContent;
+        if (jsonData != null) {
+          debugPrint('Found JSON record: $jsonData');
+          mergedData.addAll(jsonData);
         } else {
-          debugPrint('Skipped non-JSON record with type: ${record.type.tnf}');
+          // Check if it's plain text to add to the list
+          final textData = record.textContent;
+          if (textData != null) {
+            debugPrint('Found plain text record: $textData');
+            plainTexts.add(textData);
+          } else {
+            debugPrint('Skipped non-JSON record with type: ${record.type.tnf}');
+          }
         }
+      }
+
+      // Add plain texts to merged data if any were found
+      if (plainTexts.isNotEmpty) {
+        mergedData['plainTexts'] = plainTexts;
       }
 
       if (mergedData.isEmpty) {
-        debugPrint('No JSON-parseable records found in NDEF message');
+        debugPrint(
+            'No JSON-parseable records or plain text found in NDEF message');
         return null;
       }
 
-      debugPrint('Merged JSON data: $mergedData');
+      debugPrint('Merged data: $mergedData');
       return mergedData;
     } catch (e) {
       debugPrint('Error parsing NDEF data with proper serializer: $e');
-      return null;
-    }
-  }
-
-  Map<String, dynamic>? _extractJsonDataFromRecord(dynamic record) {
-    try {
-      // Use the convenient getter methods from NdefRecordSerializer
-
-      // First priority: Direct JSON records
-      final jsonData = record.jsonContent;
-      if (jsonData != null) {
-        debugPrint('Found JSON record: $jsonData');
-        return jsonData;
-      }
-
-      // Second priority: Text records that might contain JSON
-      final textData = record.textContent;
-      if (textData != null) {
-        try {
-          final parsedJson = json.decode(textData);
-          if (parsedJson is Map<String, dynamic>) {
-            debugPrint('Found JSON in text record: $parsedJson');
-            return parsedJson;
-          }
-        } catch (_) {
-          // Not valid JSON, ignore
-        }
-      }
-
-      return null;
-    } catch (e) {
-      debugPrint('Error extracting JSON from NDEF record: $e');
       return null;
     }
   }

@@ -29,13 +29,24 @@ class _PaymentConfirmationPageState extends State<PaymentConfirmationPage> {
 
   void _parsePaymentData() {
     try {
+      // Check if it's the formatted NDEF data from app layout
+      if (widget.paymentData.startsWith('=== DATOS NFC RECIBIDOS ===')) {
+        // It's already formatted text, treat as raw data
+        _parsedData = {'Datos NFC Completos': widget.paymentData};
+        return;
+      }
+
+      // Try to parse as JSON
       if (widget.paymentData.startsWith('{') &&
           widget.paymentData.endsWith('}')) {
         _parsedData = json.decode(widget.paymentData) as Map<String, dynamic>;
+      } else {
+        // Treat as plain text
+        _parsedData = {'Mensaje': widget.paymentData};
       }
     } catch (e) {
       // Si no es JSON válido, tratarlo como texto plano
-      _parsedData = {'message': widget.paymentData};
+      _parsedData = {'Datos Recibidos': widget.paymentData};
     }
   }
 
@@ -66,7 +77,7 @@ class _PaymentConfirmationPageState extends State<PaymentConfirmationPage> {
               Icon(Icons.check_circle, color: Colors.green, size: 28),
               SizedBox(width: 12),
               Text(
-                'Pago Exitoso',
+                'Datos Procesados',
                 style: TextStyle(
                   fontFamily: 'SpaceMono',
                   fontSize: 18,
@@ -76,7 +87,7 @@ class _PaymentConfirmationPageState extends State<PaymentConfirmationPage> {
             ],
           ),
           content: const Text(
-            'El pago se ha procesado correctamente.',
+            'Los datos NFC han sido procesados y mostrados correctamente.',
             style: TextStyle(
               fontFamily: 'SpaceMono',
               fontSize: 14,
@@ -121,7 +132,7 @@ class _PaymentConfirmationPageState extends State<PaymentConfirmationPage> {
         ),
         titleSpacing: 0,
         title: const Text(
-          'Confirmar Pago',
+          'Datos NFC Recibidos',
           style: TextStyle(
             fontFamily: 'SpaceMono',
             color: Colors.white,
@@ -181,7 +192,7 @@ class _PaymentConfirmationPageState extends State<PaymentConfirmationPage> {
                           Icon(Icons.nfc, color: Colors.red, size: 24),
                           SizedBox(width: 12),
                           Text(
-                            'Información del Pago',
+                            'Información de los Datos',
                             style: TextStyle(
                               fontFamily: 'SpaceMono',
                               fontSize: 16,
@@ -231,7 +242,7 @@ class _PaymentConfirmationPageState extends State<PaymentConfirmationPage> {
                                   ),
                                   SizedBox(width: 12),
                                   Text(
-                                    'Procesando...',
+                                    'Procesando datos...',
                                     style: TextStyle(
                                       fontFamily: 'SpaceMono',
                                       fontSize: 16,
@@ -241,7 +252,7 @@ class _PaymentConfirmationPageState extends State<PaymentConfirmationPage> {
                                 ],
                               )
                             : const Text(
-                                'Confirmar Pago',
+                                'Procesar Datos',
                                 style: TextStyle(
                                   fontFamily: 'SpaceMono',
                                   fontSize: 16,
@@ -292,27 +303,35 @@ class _PaymentConfirmationPageState extends State<PaymentConfirmationPage> {
       widgets.add(
         Padding(
           padding: const EdgeInsets.only(bottom: 12),
-          child: Row(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(
-                width: 100,
-                child: Text(
-                  '$key: ${value.toString()}',
-                  style: const TextStyle(
-                    fontFamily: 'SpaceMono',
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black87,
-                  ),
+              Text(
+                key,
+                style: const TextStyle(
+                  fontFamily: 'SpaceMono',
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
                 ),
               ),
-              Expanded(
+              const SizedBox(height: 4),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color.fromARGB(255, 248, 244, 237),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: Colors.grey.withOpacity(0.3),
+                    width: 1,
+                  ),
+                ),
                 child: Text(
-                  value.toString(),
+                  _formatValue(value),
                   style: const TextStyle(
                     fontFamily: 'SpaceMono',
-                    fontSize: 14,
+                    fontSize: 13,
                     color: Colors.black54,
                   ),
                 ),
@@ -324,6 +343,48 @@ class _PaymentConfirmationPageState extends State<PaymentConfirmationPage> {
     });
 
     return widgets;
+  }
+
+  String _formatValue(dynamic value) {
+    if (value is Map) {
+      return _formatMapValue(value, 0);
+    } else if (value is List) {
+      return _formatListValue(value, 0);
+    } else {
+      return value.toString();
+    }
+  }
+
+  String _formatMapValue(Map map, int indentLevel) {
+    final buffer = StringBuffer();
+    final indent = '  ' * indentLevel;
+
+    map.forEach((key, value) {
+      if (value is Map || value is List) {
+        buffer.writeln('$indent$key:');
+        buffer.write(_formatValue(value));
+      } else {
+        buffer.writeln('$indent$key: $value');
+      }
+    });
+
+    return buffer.toString();
+  }
+
+  String _formatListValue(List list, int indentLevel) {
+    final buffer = StringBuffer();
+    final indent = '  ' * indentLevel;
+
+    for (int i = 0; i < list.length; i++) {
+      if (list[i] is Map || list[i] is List) {
+        buffer.writeln('$indent[$i]:');
+        buffer.write(_formatValue(list[i]));
+      } else {
+        buffer.writeln('$indent[$i]: ${list[i]}');
+      }
+    }
+
+    return buffer.toString();
   }
 
   Widget _buildRawDataWidget() {
