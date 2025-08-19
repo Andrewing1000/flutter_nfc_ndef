@@ -174,11 +174,6 @@ private class NdefParser(private val rawMessage: Bytes) {
     }
 }
 
-class NdefRecordTuple(
-    val type: NdefTypeField,
-    val payload: NdefPayload? = null,
-    val id: NdefIdField? = null
-)
 
 class NdefMessageSerializer private constructor(
     private val records: List<NdefRecordSerializer>
@@ -199,23 +194,9 @@ class NdefMessageSerializer private constructor(
             return NdefMessageSerializer(records)
         }
 
-        fun fromRecords(recordData: List<NdefRecordTuple>): NdefMessageSerializer {
-            require(recordData.isNotEmpty()) { "Cannot create an NDEF message with zero records." }
-
-            val serializedRecords = mutableListOf<NdefRecordSerializer>()
-            for (i in recordData.indices) {
-                val data = recordData[i]
-                serializedRecords.add(
-                    NdefRecordSerializer.record(
-                        type = data.type,
-                        payload = data.payload,
-                        id = data.id,
-                        isFirstInMessage = (i == 0),
-                        isLastInMessage = (i == recordData.size - 1)
-                    )
-                )
-            }
-            return NdefMessageSerializer(serializedRecords)
+        fun fromRecords(records: List<NdefRecordSerializer>): NdefMessageSerializer {
+            require(records.isNotEmpty()) { "Cannot create an NDEF message with zero records." }
+            return NdefMessageSerializer(records)
         }
     }
 }

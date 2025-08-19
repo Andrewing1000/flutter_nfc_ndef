@@ -155,14 +155,6 @@ class _NdefParser {
   }
 }
 
-class NdefRecordTuple {
-  final NdefTypeField type;
-  final NdefPayload? payload;
-  final NdefIdField? id;
-
-  NdefRecordTuple({required this.type, this.payload, this.id});
-}
-
 class NdefMessageSerializer extends ApduSerializer {
   final List<NdefRecordSerializer> records;
 
@@ -179,26 +171,13 @@ class NdefMessageSerializer extends ApduSerializer {
   }
 
   factory NdefMessageSerializer.fromRecords({
-    required List<NdefRecordTuple> recordData,
+    required List<NdefRecordSerializer> records,
   }) {
-    if (recordData.isEmpty) {
+    if (records.isEmpty) {
       throw ArgumentError('Cannot create an NDEF message with zero records.');
     }
 
-    final List<NdefRecordSerializer> serializedRecords = [];
-    for (int i = 0; i < recordData.length; i++) {
-      final data = recordData[i];
-      serializedRecords.add(
-        NdefRecordSerializer.record(
-          type: data.type,
-          payload: data.payload,
-          id: data.id,
-          isFirstInMessage: (i == 0),
-          isLastInMessage: (i == recordData.length - 1),
-        )
-      );
-    }
-    return NdefMessageSerializer._internal(serializedRecords);
+    return NdefMessageSerializer._internal(records);
   }
 
   NdefMessageSerializer._internal(this.records) : super(name: "NDEF Message");

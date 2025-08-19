@@ -39,7 +39,7 @@ class QRContainer extends StatelessWidget {
               width: double.infinity,
               height: 80,
               decoration: const BoxDecoration(
-                color: Color.fromRGBO(0xae, 0x09, 0x00, 1),
+                color: Color.fromRGBO(219, 11, 0, 1),
               ),
               child:  Align(
                   alignment: const Alignment(1, 1),

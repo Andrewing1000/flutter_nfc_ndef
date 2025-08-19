@@ -10,7 +10,6 @@ import 'app_layer/ndef_format/serializers/ndef_record_serializer.dart';
 export 'app_layer/file_access/serializers/apdu_response_serializer.dart';
 export 'app_layer/file_access/serializers/apdu_command_serializer.dart';
 
-
 class FlutterHceManager {
   static FlutterHceManager? _instance;
   static FlutterHceManager get instance => _instance ??= FlutterHceManager._();
@@ -40,11 +39,8 @@ class FlutterHceManager {
     try {
       await stop();
 
-      // Convert NdefRecordSerializer to the format expected by Kotlin
-      final recordsData =
-          records.map((record) => _convertRecordToMap(record)).toList();
+      final recordsData = records.map((r) => r.buffer).toList();
 
-      // Initialize HCE via platform channel
       final result = await _methodChannel.invokeMethod<bool>('init', {
         'aid': aid,
         'records': recordsData,
@@ -68,34 +64,6 @@ class FlutterHceManager {
     }
   }
 
-  Map<String, dynamic> _convertRecordToMap(NdefRecordSerializer record) {
-    String typeString = 'T'; // Default
-    if (record.type.buffer.isNotEmpty) {
-      if (record.type.buffer.length == 1) {
-        final typeByte = record.type.buffer[0];
-        if (typeByte == 0x54){
-          typeString = 'T'; 
-        }
-        else if (typeByte == 0x55){
-          typeString = 'U';
-        } 
-      } else {
-        try {
-          typeString = String.fromCharCodes(record.type.buffer);
-        } catch (e) {
-          typeString = 'T'; // Fallback
-        }
-      }
-    }
-
-    return {
-      'type': typeString,
-      'payload': record.payload?.buffer ?? Uint8List(0),
-      if (record.id != null) 'id': record.id!.buffer,
-    };
-  }
-
-  /// Start listening to HCE events
   void _startListening() {
     _eventSubscription = _eventChannel.receiveBroadcastStream().listen(
       (event) {
@@ -113,7 +81,6 @@ class FlutterHceManager {
     );
   }
 
-  /// Handle incoming HCE events with intelligent parsing
   void _handleEvent(Map<String, dynamic> eventData) {
     try {
       if (eventData.containsKey('type')) {
@@ -137,7 +104,6 @@ class FlutterHceManager {
     }
   }
 
-  /// Handle transaction events with APDU parsing
   void _handleTransaction(Map<String, dynamic> eventData) {
     if (_onTransaction == null) return;
 
@@ -149,11 +115,9 @@ class FlutterHceManager {
         final commandBytes = Uint8List.fromList(commandData.cast<int>());
         final responseBytes = Uint8List.fromList(responseData.cast<int>());
 
-        // Parse APDU command and response using app_layer deserializers
         final command = ApduCommand.fromBytes(commandBytes);
         final response = ApduResponse.fromBytes(responseBytes);
 
-        // Call the user's callback with parsed data
         _onTransaction!(command, response);
       }
     } catch (e) {
@@ -162,12 +126,11 @@ class FlutterHceManager {
     }
   }
 
-  /// Handle deactivation events
   void _handleDeactivation(Map<String, dynamic> eventData) {
     if (_onDeactivation == null) return;
 
     try {
-      final reasonCode = eventData['reason'] as int? ?? 2; // Default to RF
+      final reasonCode = eventData['reason'] as int? ?? 2; 
       final reason = HceDeactivationReason.fromCode(reasonCode);
 
       _onDeactivation!(reason);
@@ -178,7 +141,6 @@ class FlutterHceManager {
     }
   }
 
-  /// Check NFC state
   Future<NfcState> checkNfcState() async {
     try {
       final result = await _methodChannel.invokeMethod<String>('checkNfcState');
@@ -188,7 +150,6 @@ class FlutterHceManager {
     }
   }
 
-  /// Check if HCE state machine is initialized
   Future<bool> isInitialized() async {
     try {
       final result =
@@ -199,7 +160,6 @@ class FlutterHceManager {
     }
   }
 
-  /// Stop HCE and cleanup resources
   Future<void> stop() async {
     await _eventSubscription?.cancel();
     _eventSubscription = null;
@@ -209,6 +169,22 @@ class FlutterHceManager {
     _isActive = false;
   }
 
-  /// Check if HCE is currently active
   bool get isActive => _isActive;
+
+  Future<ApduResponse> processApdu(Uint8List commandBytes) async {
+    try {
+      final responseBytes = await _methodChannel.invokeMethod<Uint8List>(
+        'processApdu',
+        {
+          'command': commandBytes,
+        },
+      );
+      if (responseBytes == null) {
+        throw const HceException('Null response from native processApdu');
+      }
+      return ApduResponse.fromBytes(responseBytes);
+    } catch (e) {
+      throw HceException('processApdu failed: $e');
+    }
+  }
 }

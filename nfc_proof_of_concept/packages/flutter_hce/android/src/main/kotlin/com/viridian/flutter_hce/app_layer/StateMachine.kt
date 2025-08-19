@@ -120,15 +120,17 @@ class HceStateMachine(
      * Takes a raw command and returns a raw response.
      */
     fun processCommand(rawCommand: Bytes): Bytes {
-        return try {
+        val res = try {
             val command = ApduCommand.fromBytes(rawCommand)
             val response = handleCommand(command)
             response.buffer
         } catch (_: IllegalArgumentException) {
+            println("Aquisistooooooooooooooooooooooooooooooooooooooooooooooooooooooooooos");
             ApduResponse.error(ApduStatusWord.fromBytes(0x6F, 0x00, "SW (Unknown Error)")).buffer
         } catch (_: Exception) {
             ApduResponse.error(ApduStatusWord.fromBytes(0x6F, 0x00, "SW (Unknown Error)")).buffer
         }
+        return res;
     }
 
     /**

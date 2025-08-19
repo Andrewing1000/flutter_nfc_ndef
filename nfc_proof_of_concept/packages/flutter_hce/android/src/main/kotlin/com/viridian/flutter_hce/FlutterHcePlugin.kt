@@ -127,8 +127,6 @@ class FlutterHcePlugin : FlutterPlugin, MethodCallHandler, ActivityAware, Stream
         onDetachedFromActivity() 
     }
 
-    // ===== EVENTCHANNEL STREAMHANDLER =====
-
     override fun onListen(arguments: Any?, events: EventSink?) {
         Log.d(TAG, "EventChannel listener attached")
         eventSink = events
@@ -139,8 +137,6 @@ class FlutterHcePlugin : FlutterPlugin, MethodCallHandler, ActivityAware, Stream
         eventSink = null
     }
 
-    // ===== METHODCHANNEL HANDLER =====
-
     override fun onMethodCall(call: MethodCall, result: Result) {
         Log.d(TAG, "Method call: ${call.method}")
         
@@ -149,6 +145,7 @@ class FlutterHcePlugin : FlutterPlugin, MethodCallHandler, ActivityAware, Stream
                 "init" -> initializeHce(call, result)
                 "checkNfcState" -> checkNfcState(result)
                 "getStateMachine" -> getStateMachineStatus(result)
+                "processApdu" -> processApdu(call, result)
                 else -> {
                     Log.w(TAG, "Unknown method: ${call.method}")
                     result.notImplemented()
@@ -163,7 +160,7 @@ class FlutterHcePlugin : FlutterPlugin, MethodCallHandler, ActivityAware, Stream
     private fun initializeHce(call: MethodCall, result: Result) {
         val aid = call.argument<ByteArray>("aid")
             ?: throw IllegalArgumentException("AID es requerido")
-        val recordsData = call.argument<List<Map<String, Any>>>("records")
+        val recordsData = call.argument<List<ByteArray>>("records")
             ?: throw IllegalArgumentException("Records son requeridos")
         val isWritable = call.argument<Boolean>("isWritable") ?: false
         val maxNdefFileSize = call.argument<Int>("maxNdefFileSize") ?: 2048
@@ -175,29 +172,19 @@ class FlutterHcePlugin : FlutterPlugin, MethodCallHandler, ActivityAware, Stream
 
         Log.d(TAG, "Initializing HCE with AID: ${aid.joinToString { "%02X".format(it) }}")
 
-        val simpleRecords = mutableListOf<NdefRecordTuple>()
-        
-        if (recordsData.isNotEmpty()) {
-            val firstRecord = recordsData[0]
-            val typeString = firstRecord["type"] as? String ?: "T"
-            val payloadData = firstRecord["payload"] as? ByteArray ?: ByteArray(0)
-            
-            val recordTuple = NdefRecordTuple(
-                type = NdefTypeField.wellKnown(typeString),
-                payload = if (payloadData.isNotEmpty()) NdefPayload(payloadData) else null,
-                id = null 
-            )
-            simpleRecords.add(recordTuple)
-            
-            Log.d(TAG, "Added NDEF record: type=$typeString, payload=${payloadData.size} bytes")
+        val parsedRecords = recordsData.mapIndexed { idx, recBytes ->
+            try {
+                NdefRecordSerializer.fromBytes(recBytes)
+            } catch (e: Exception) {
+                throw IllegalArgumentException("Invalid NDEF record at index $idx: ${e.message}")
+            }
         }
 
-        val ndefMessage = NdefMessageSerializer.fromRecords(simpleRecords)
-        
-    stateMachine = HceStateMachine(aid, ndefMessage, isWritable, maxNdefFileSize)
-    HceManager.stateMachine = stateMachine
-        
-        Log.d(TAG, "HCE initialized successfully")
+        val ndefMessage = NdefMessageSerializer.fromRecords(parsedRecords)        
+        stateMachine = HceStateMachine(aid, ndefMessage, isWritable, maxNdefFileSize)
+        HceManager.stateMachine = stateMachine
+            
+        Log.d(TAG, "HCE initialized successfully with ${parsedRecords.size} record(s)")
         result.success(true)
     }
 
@@ -217,6 +204,26 @@ class FlutterHcePlugin : FlutterPlugin, MethodCallHandler, ActivityAware, Stream
             result.error("NOT_INITIALIZED", "State Machine no inicializado. Llama init() primero.", null)
         } else {
             result.success("State machine initialized")
+        }
+    }
+
+    private fun processApdu(call: MethodCall, result: Result) {
+        val sm = stateMachine
+        if (sm == null) {
+            result.error("NOT_INITIALIZED", "State Machine no inicializado. Llama init() primero.", null)
+            return
+        }
+        val command = call.argument<ByteArray>("command")
+        if (command == null) {
+            result.error("BAD_ARGS", "Falta el argumento 'command' (ByteArray)", null)
+            return
+        }
+        try {
+            val response = sm.processCommand(command)
+            result.success(response)
+        } catch (e: Exception) {
+            Log.e(TAG, "processApdu error: ${e.message}", e)
+            result.error("ERROR", e.message, e.toString())
         }
     }
 }

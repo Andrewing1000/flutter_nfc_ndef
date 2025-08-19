@@ -259,13 +259,13 @@ class AppLayoutState extends State<AppLayout> with TickerProviderStateMixin {
       return const Scaffold(
         body: Center(
           child: CircularProgressIndicator(
-            color: Color.fromRGBO(0xae, 0x09, 0x00, 1),
+            color: Color.fromRGBO(219, 11, 0, 1),
           ),
         ),
       );
     }
 
-    const Color bgRed = Color.fromRGBO(0xae, 0x09, 0x00, 1);
+    const Color bgRed = Color.fromRGBO(219, 11, 0, 1);
     const Color inactiveGreyText = Color.fromARGB(255, 163, 163, 163);
 
     final currentTabIndex = _getCurrentTabIndex();
