@@ -72,31 +72,26 @@ void main() {
       );
       expect(ok, isTrue);
 
-      // Act: select a different AID
       final badAid = Uint8List.fromList([0xA0, 0x00, 0x00, 0x03, 0x86, 0x99]);
       final selectBad = ApduCommandParser.selectByName(applicationId: badAid);
       final resp =
           await FlutterHceManager.instance.processApdu(selectBad.toBytes());
 
-      // Assert
       expect(sw1(resp), 0x6A);
-      expect(sw2(resp), 0x82); // File Not Found
+      expect(sw2(resp), 0x82); 
     });
 
     testWidgets('select bad file id under APP_SELECTED returns 6A82',
         (tester) async {
-      // Arrange
       final aid = Uint8List.fromList([0xA0, 0x00, 0x00, 0x03, 0x86, 0x98]);
       final rec = NdefRecordSerializer.text('x', 'en');
       expect(
           await FlutterHceManager.instance.initialize(aid: aid, records: [rec]),
           isTrue);
 
-      // Move to APP_SELECTED
       final selectApp = ApduCommandParser.selectByName(applicationId: aid);
       await FlutterHceManager.instance.processApdu(selectApp.toBytes());
 
-      // Act: select unknown file id 0xE105
       final badFile =
           ApduCommandParser.selectByFileId(fileId: const [0xE1, 0x05]);
       final resp =
@@ -109,20 +104,17 @@ void main() {
     testWidgets(
         'read too-long length (256) returns 6700 and wrong offset returns 6B00',
         (tester) async {
-      // Arrange
       final aid = Uint8List.fromList([0xA0, 0x00, 0x00, 0x03, 0x86, 0x98]);
       final rec = NdefRecordSerializer.text('payload', 'en');
       expect(
           await FlutterHceManager.instance.initialize(aid: aid, records: [rec]),
           isTrue);
 
-      // Select app and NDEF file
       await FlutterHceManager.instance.processApdu(
           ApduCommandParser.selectByName(applicationId: aid).toBytes());
       await FlutterHceManager.instance
           .processApdu(ApduCommandParser.selectNdefFile().toBytes());
 
-      // Too-long length: 256 (encoded as Le=0 in short APDU)
       final commandCls = ApduClass.standard.buffer;
       final commandIns = ApduInstruction.readBinary.buffer;
       final commandOff = ApduParams.forOffset(0).buffer;
@@ -140,7 +132,6 @@ void main() {
       expect(sw1(r1), 0x67);
       expect(sw2(r1), 0x00);
 
-      // Get NLEN to compute end offset
       final lenResp = await FlutterHceManager.instance
           .processApdu(ApduCommandParser.readNdefLength().toBytes());
       final nlen = (lenResp.buffer[0] << 8) + lenResp.buffer[1];
@@ -223,7 +214,6 @@ void main() {
         offset += slice.length;
       }
 
-      // Finalize write: NLEN=payload.length
       final nlenHi = (payload.length >> 8) & 0xFF;
       final nlenLo = payload.length & 0xFF;
       apdu = ApduCommandParser.updateBinary(data: [nlenHi, nlenLo], offset: 0);
@@ -231,7 +221,6 @@ void main() {
       expect(sw1(resp), 0x90);
       expect(sw2(resp), 0x00);
 
-      // Read back and validate content
       final flow = NdefType4ReaderFlow(aid: aid);
       final file = await flow.readAll();
       final readMsg = dart_msg.NdefMessageSerializer.fromBytes(file.sublist(2));
@@ -278,7 +267,6 @@ void main() {
       expect(sw1(cc), 0x90);
       expect(sw2(cc), 0x00);
 
-      // Switch to NDEF and ensure length is readable
       await FlutterHceManager.instance
           .processApdu(ApduCommandParser.selectNdefFile().toBytes());
       final len = await FlutterHceManager.instance
