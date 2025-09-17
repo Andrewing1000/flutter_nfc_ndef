@@ -23,8 +23,8 @@ class AppLayoutState extends State<AppLayout> with TickerProviderStateMixin {
   NavigationController? _navigationController;
   bool _isInitialized = false;
 
-  // Páginas persistentes para preservar estado
   late final RecievePaymentPage _receivePaymentPage;
+  // late final Widget _scanQrPage;
   late final ScanQrPage _scanQrPage;
   PaymentConfirmationPage? _paymentConfirmationPage;
 
@@ -45,25 +45,20 @@ class AppLayoutState extends State<AppLayout> with TickerProviderStateMixin {
   }
 
   Future<void> _initializeApp() async {
-    // Initialize launch service
     await AppLaunchService.instance.initialize();
 
-    // Determine initial page based on launch type
     final AppPage initialPage =
         AppLaunchService.instance.launchedFromTechDiscovered
             ? AppPage.scanQr
             : AppPage.receivePayment;
 
-    // Inicializar páginas persistentes
     _receivePaymentPage = const RecievePaymentPage();
     _scanQrPage = const ScanQrPage();
 
     _navigationController = NavigationController(initialPage: initialPage);
     _navigationController!.addListener(_onNavigationChanged);
 
-    // Set up callback for TECH_DISCOVERED while app is running
-    AppLaunchService.instance
-        .setTechDiscoveredCallback(_handleTechDiscoveredWhileRunning);
+    AppLaunchService.instance.setTechDiscoveredCallback(_handleTechDiscoveredWhileRunning);
 
     _notificationController = AnimationController(
       vsync: this,
@@ -115,31 +110,24 @@ class AppLayoutState extends State<AppLayout> with TickerProviderStateMixin {
     super.dispose();
   }
 
-  // Métodos públicos para navegación
   void navigateToPaymentConfirmation(String paymentData) {
     if (_navigationController == null) return;
 
-    // Crear nueva instancia de PaymentConfirmation solo si es necesario
     _paymentConfirmationPage =
         PaymentConfirmationPage(paymentData: paymentData);
     _navigationController!
         .navigateToPage(AppPage.paymentConfirmation, paymentData: paymentData);
   }
 
-  // New method for navigating with complete NFC data
   void navigateToDataDisplay(Map<String, dynamic> ndefData) {
     if (_navigationController == null) return;
 
-    // Create a formatted string representation of the complete data
     final dataString = _formatCompleteNdefData(ndefData);
-
-    // Crear nueva instancia de PaymentConfirmation que mostrará todos los datos
     _paymentConfirmationPage = PaymentConfirmationPage(paymentData: dataString);
     _navigationController!
         .navigateToPage(AppPage.paymentConfirmation, paymentData: dataString);
   }
 
-  // Helper method to format complete NDEF data for display
   String _formatCompleteNdefData(Map<String, dynamic> ndefData) {
     final buffer = StringBuffer();
     buffer.writeln('=== DATOS NFC RECIBIDOS ===\n');
@@ -180,8 +168,6 @@ class AppLayoutState extends State<AppLayout> with TickerProviderStateMixin {
 
   void goBack() {
     if (_navigationController == null) return;
-
-    // Si volvemos desde PaymentConfirmation, limpiar la instancia
     if (_navigationController!.currentPage == AppPage.paymentConfirmation) {
       _paymentConfirmationPage = null;
     }
@@ -212,8 +198,8 @@ class AppLayoutState extends State<AppLayout> with TickerProviderStateMixin {
     return IndexedStack(
       index: _getCurrentTabIndex(),
       children: [
-        _receivePaymentPage, // índice 0
-        _scanQrPage, // índice 1
+        _receivePaymentPage,
+        _scanQrPage,
       ],
     );
   }
@@ -228,7 +214,6 @@ class AppLayoutState extends State<AppLayout> with TickerProviderStateMixin {
       case AppPage.scanQr:
         return 1;
       case AppPage.paymentConfirmation:
-        // En confirmación de pago, mantener la última tab activa
         return _navigationController!.navigationStack.length > 1
             ? _getCurrentTabIndexFromPreviousPage()
             : 1;
@@ -303,15 +288,12 @@ class AppLayoutState extends State<AppLayout> with TickerProviderStateMixin {
           child: Stack(
             alignment: Alignment.topCenter,
             children: [
-              // Stack principal con las páginas base (preserva estado)
               _getCurrentPage(),
 
-              // Overlay para PaymentConfirmation si está activa
               if (_navigationController!.currentPage ==
                   AppPage.paymentConfirmation)
                 _buildPaymentConfirmationOverlay(),
 
-              // Notificaciones
               Positioned(
                 top: 20,
                 child: FadeTransition(

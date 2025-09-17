@@ -11,7 +11,6 @@ class NavigationController extends ChangeNotifier {
   AppPage get currentPage => _navigationStack.last;
   bool get canGoBack => _navigationStack.length > 1;
 
-  // Constructor that allows setting initial page
   NavigationController({AppPage? initialPage}) {
     if (initialPage != null) {
       _navigationStack.clear();
@@ -40,7 +39,6 @@ class NavigationController extends ChangeNotifier {
   }
 
   void navigateToTab(int tabIndex) {
-    // Limpiar stack y navegar a la tab correspondiente
     _navigationStack.clear();
     _pagePaymentData.clear();
 
@@ -54,7 +52,6 @@ class NavigationController extends ChangeNotifier {
   }
 
   void initializeToScanQr() {
-    // Método específico para inicializar directamente en ScanQrPage
     _navigationStack.clear();
     _pagePaymentData.clear();
     _navigationStack.add(AppPage.scanQr);

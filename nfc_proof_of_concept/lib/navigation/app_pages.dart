@@ -1,4 +1,3 @@
-// lib/navigation/app_pages.dart
 
 enum AppPage {
   receivePayment,

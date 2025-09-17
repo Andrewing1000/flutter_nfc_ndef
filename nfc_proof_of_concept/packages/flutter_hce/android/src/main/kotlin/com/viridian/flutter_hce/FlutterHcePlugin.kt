@@ -183,8 +183,12 @@ class FlutterHcePlugin : FlutterPlugin, MethodCallHandler, ActivityAware, Stream
         val ndefMessage = NdefMessageSerializer.fromRecords(parsedRecords)        
         stateMachine = HceStateMachine(aid, ndefMessage, isWritable, maxNdefFileSize)
         HceManager.stateMachine = stateMachine
-            
-        Log.d(TAG, "HCE initialized successfully with ${parsedRecords.size} record(s)")
+
+        Log.d(TAG, "\n");
+        Log.d(TAG, "\n");
+        Log.d(TAG, "\n");
+        Log.d(TAG, "----------------------------------------------------------------------------------->");
+        Log.d(TAG, "HCE initialized successfully with ${parsedRecords.size} record(s)");
         result.success(true)
     }
 

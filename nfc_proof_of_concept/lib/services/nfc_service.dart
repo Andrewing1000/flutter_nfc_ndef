@@ -155,6 +155,11 @@ class NfcService {
   }
 
   Future<bool> _initializeReadMode(Uint8List aid) async {
+
+    debugPrint("_________________________________________________________________________________________________________>");
+    debugPrint("Se inicializa el ReadMode");
+
+
     try {
       await _stopAll();
 
