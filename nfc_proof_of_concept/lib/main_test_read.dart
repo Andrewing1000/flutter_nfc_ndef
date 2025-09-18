@@ -18,6 +18,7 @@ class TestLayout extends StatefulWidget{
 
 class TestLayoutState extends State<TestLayout>{
 
+  String? data;
   Uint8List? aid;
 
   @override
@@ -46,7 +47,19 @@ class TestLayoutState extends State<TestLayout>{
               if(aid != null) NfcActiveBar(
                   aid: aid!,
                   mode: NfcBarMode.readOnly,
-              )
+                  onRead: (data){
+                    setState(() {
+                      this.data = data.toString();
+                    });
+                  },
+              ),
+
+              if(data != null)
+                Container(
+                  padding: const EdgeInsets.all(40),
+                  alignment: const Alignment(0, 0),
+                  child: Text(data!),
+                )
             ],
           ),
         ),

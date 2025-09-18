@@ -44,7 +44,7 @@
         </activity>
 
         <service 
-            android:name="io.flutter.plugins.nfc_host_card_emulation.AndroidHceService"
+            android:name="com.viridian.flutter_hce.AndroidHceService"
             android:exported="true"
             android:permission="android.permission.BIND_NFC_SERVICE">
             <intent-filter>

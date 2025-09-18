@@ -146,6 +146,9 @@ class HceStateMachine(
     }
 
     private fun handleIdleState(command: ApduCommand): ApduResponse {
+        println("-------------------------------------------------------------------------->");
+        println("Handling commnad from idle State");
+        println("Is select commnad ${command is SelectCommand}");
         if (command is SelectCommand) {
             val p = command.params.buffer
             if (p.contentEquals(ApduParams.byName.buffer)) {
@@ -162,6 +165,9 @@ class HceStateMachine(
     }
 
     private fun handleAppSelectedState(command: ApduCommand): ApduResponse {
+        println("-------------------------------------------------------------------------->");
+        println("Handling commnad from AppSeleceted State");
+        println("Is select commnad ${command is SelectCommand}");
         if (command is SelectCommand) {
             val p = command.params.buffer
             if (!p.contentEquals(ApduParams.byFileId.buffer)) {
@@ -182,6 +188,11 @@ class HceStateMachine(
     }
 
     private fun handleCcSelectedState(command: ApduCommand): ApduResponse {
+        println("-------------------------------------------------------------------------->");
+        println("Handling commnad from ccselected State");
+        println("Is ReadBinary commnad ${command is ReadBinaryCommand}");
+        println("Is Select commnad ${command is SelectCommand}");
+        println("Is UpdateBinary commnad ${command is UpdateBinaryCommand}");
         return when (command) {
             is ReadBinaryCommand -> processRead(command, capabilityContainer.buffer)
             is SelectCommand -> handleAppSelectedState(command) // allow re-selecting files
@@ -191,6 +202,11 @@ class HceStateMachine(
     }
 
     private fun handleNdefSelectedState(command: ApduCommand): ApduResponse {
+        println("-------------------------------------------------------------------------->");
+        println("Handling commnad from NdefSelected State");
+        println("Is ReadBinary commnad ${command is ReadBinaryCommand}");
+        println("Is Select commnad ${command is SelectCommand}");
+        println("Is UpdateBinary commnad ${command is UpdateBinaryCommand}");
         return when (command) {
             is ReadBinaryCommand -> processRead(command, ndefFile.buffer)
             is UpdateBinaryCommand -> processUpdate(command)

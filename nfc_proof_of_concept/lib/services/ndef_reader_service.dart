@@ -19,6 +19,10 @@ class NdefReaderService {
       return null;
     }
 
+    print("--------------------------------------------------------->Max transieve Length");
+    print(isoDep.maxTransceiveLength);
+    print(isoDep.isExtendedLengthApduSupported);
+
     try {
       debugPrint('Connected to ISO-DEP tag');
 

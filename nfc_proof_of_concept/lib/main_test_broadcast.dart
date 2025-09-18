@@ -45,6 +45,7 @@ class TestLayoutState extends State<TestLayout>{
             children: [
               if(aid != null) NfcActiveBar(
                   aid: aid!,
+                  broadcastData: "Prueba NFC, test data",
                   mode: NfcBarMode.broadcastOnly,
               )
             ],
