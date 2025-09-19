@@ -131,7 +131,7 @@ class NfcService {
         aid: aid,
         records: records,
         isWritable: false,
-        maxNdefFileSize: 4096,
+        maxNdefFileSize: 32768, // 32KB,
         onTransaction: _onHceTransaction,
         onDeactivation: _onHceDeactivation,
         onError: _onHceError,

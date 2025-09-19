@@ -15,7 +15,7 @@ abstract class ApduField(val name: String, initialSize: Int) {
     }
 
     override fun toString(): String =
-        buffer.joinToString(" ") { "%02X".format(it.toInt() and 0xFF) }
+        buffer.joinToString(" ") { "%02X".format(it.toLong() and 0xFF) }
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true

@@ -92,7 +92,7 @@ class HceStateMachine(
     private val aid: ByteArray,
     initialMessage: NdefMessageSerializer,
     private val isWritable: Boolean = false,
-    maxNdefFileSize: Int = 2048 // 2KB
+    maxNdefFileSize: Int = 32768 // 32KB
 ) {
     private var currentState = HceState.IDLE
 

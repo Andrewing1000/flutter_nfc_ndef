@@ -163,7 +163,7 @@ class FlutterHcePlugin : FlutterPlugin, MethodCallHandler, ActivityAware, Stream
         val recordsData = call.argument<List<ByteArray>>("records")
             ?: throw IllegalArgumentException("Records son requeridos")
         val isWritable = call.argument<Boolean>("isWritable") ?: false
-        val maxNdefFileSize = call.argument<Int>("maxNdefFileSize") ?: 2048
+        val maxNdefFileSize = call.argument<Int>("maxNdefFileSize") ?: 32768 // 32KB
 
         // Validar AID
         if (aid.size < 5 || aid.size > 16) {

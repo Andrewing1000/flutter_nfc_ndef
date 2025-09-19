@@ -111,7 +111,7 @@ class HceStateMachine {
     Uint8List? aid,
     required NdefMessageSerializer initialMessage,
     bool isWritable = false,
-    int maxNdefFileSize = 2048, // 2KB
+    int maxNdefFileSize = 32768 // 32KB
   })  : aid = aid ?? ndefAid,
         isWritable = isWritable,
         capabilityContainer = CapabilityContainer(

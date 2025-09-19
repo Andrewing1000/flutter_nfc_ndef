@@ -31,7 +31,7 @@ class FlutterHceManager {
     required Uint8List aid,
     required List<NdefRecordSerializer> records,
     bool isWritable = false,
-    int maxNdefFileSize = 2048,
+    int maxNdefFileSize = 32768, // 32KB,
     HceTransactionCallback? onTransaction,
     HceDeactivationCallback? onDeactivation,
     HceErrorCallback? onError,

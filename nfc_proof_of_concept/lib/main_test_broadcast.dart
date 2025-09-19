@@ -1,6 +1,9 @@
+import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:nfc_proof_of_concept/nfc_active_bar.dart';
 import 'dart:typed_data';
+import 'package:crypto/crypto.dart';
 
 import 'package:nfc_proof_of_concept/nfc_aid_helper.dart';
 
@@ -33,8 +36,21 @@ class TestLayoutState extends State<TestLayout>{
     });
   }
 
+  String generatePayload({int length = 10240}){
+      final r = Random.secure();
+      final charData = List<int>.generate(length, (index) => r.nextInt(255));
+      return String.fromCharCodes(charData);
+  }
+
   @override
   Widget build(BuildContext build) {
+
+    String payload = generatePayload();
+    Map<String, dynamic> testMessage = {
+      "digest": sha256.convert(utf8.encode(payload)).toString(),
+      "payload": payload,
+    };
+    
     return MaterialApp(
       home: Scaffold(
         body: Container(
@@ -45,7 +61,7 @@ class TestLayoutState extends State<TestLayout>{
             children: [
               if(aid != null) NfcActiveBar(
                   aid: aid!,
-                  broadcastData: "Prueba NFC, test data",
+                  broadcastData: jsonEncode(testMessage),
                   mode: NfcBarMode.broadcastOnly,
               )
             ],

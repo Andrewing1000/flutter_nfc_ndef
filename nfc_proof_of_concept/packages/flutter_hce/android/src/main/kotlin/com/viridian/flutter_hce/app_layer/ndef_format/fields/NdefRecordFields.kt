@@ -149,7 +149,7 @@ private class ShortNdefPayloadLengthField(private val payloadLength: Int) : Ndef
 
 private class LongNdefPayloadLengthField(private val payloadLength: Int) : NdefPayloadLengthField("Payload Length", 4) {
     init {
-        require(payloadLength >= 0 && payloadLength <= 0xFFFFFFFF.toInt()) { "Payload Length for long record is invalid." }
+        require(payloadLength >= 0 && payloadLength <= 0xFFFFFFFF.toLong()) { "Payload Length for long record is invalid." }
         buffer[0] = ((payloadLength shr 24) and 0xFF).toByte()
         buffer[1] = ((payloadLength shr 16) and 0xFF).toByte()
         buffer[2] = ((payloadLength shr 8) and 0xFF).toByte()

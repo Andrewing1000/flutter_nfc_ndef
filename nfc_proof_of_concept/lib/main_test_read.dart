@@ -1,8 +1,13 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+
 import 'package:nfc_proof_of_concept/nfc_active_bar.dart';
 import 'dart:typed_data';
 
 import 'package:nfc_proof_of_concept/nfc_aid_helper.dart';
+import 'package:crypto/crypto.dart';
+
 
 void main(){
   runApp(TestLayout());
@@ -18,7 +23,9 @@ class TestLayout extends StatefulWidget{
 
 class TestLayoutState extends State<TestLayout>{
 
-  String? data;
+  bool hashCheck = false;
+
+  Map<String, dynamic>? data;
   Uint8List? aid;
 
   @override
@@ -31,6 +38,32 @@ class TestLayoutState extends State<TestLayout>{
     var retrievedAid = await NfcAidHelper.getAidFromXml();
     setState((){
       aid = retrievedAid;
+    });
+  }
+
+  void _checkData(Map<String, dynamic> data){
+    this.data = data;
+
+    dynamic digest = data["digest"];
+    dynamic payload = data["payload"];
+
+    if(digest == null || payload == null || digest is! String || payload is! String){
+      setState(() {
+        hashCheck = false;
+      });
+      return;
+    }
+
+    String afterDigest = sha256.convert(utf8.encode(payload)).toString();
+    if(digest != afterDigest){
+      setState((){
+        hashCheck = false;
+      });
+      return;
+    }
+
+    setState(() {
+      hashCheck = true;
     });
   }
 
@@ -47,19 +80,27 @@ class TestLayoutState extends State<TestLayout>{
               if(aid != null) NfcActiveBar(
                   aid: aid!,
                   mode: NfcBarMode.readOnly,
-                  onRead: (data){
-                    setState(() {
-                      this.data = data.toString();
-                    });
-                  },
+                  onRead: _checkData,
               ),
 
-              if(data != null)
-                Container(
-                  padding: const EdgeInsets.all(40),
-                  alignment: const Alignment(0, 0),
-                  child: Text(data!),
-                )
+              Visibility(
+                  visible: data != null,
+                  child: Container(
+                    padding: EdgeInsets.all(20),
+                    child: Column(
+                      children: [
+                            if(data != null)
+                              if(hashCheck) const Icon(Icons.check, size: 40, color: Colors.black,)
+                              else const Icon(Icons.error_outline, size: 40, color: Colors.black),
+
+                            Text(data?["digest"] ?? ""),
+                            // Text((data?["payload"] ?? "" as String).substring(0, 30) ?? "")
+                      ]
+                    )
+
+                  )
+              )
+
             ],
           ),
         ),

@@ -39,6 +39,7 @@ dependencies:
     path: packages/flutter_hce
   qr_flutter: ^4.1.0
   camera: 0.10.5+7
+  crypto: ^3.0.0
 
 dev_dependencies:
   flutter_test:
